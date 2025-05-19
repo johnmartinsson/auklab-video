@@ -38,6 +38,8 @@ import subprocess
 import sys
 import textwrap
 from typing import List, Tuple
+from itertools import cycle
+
 
 # ---------------------------------------------------------------------------
 # Constants & paths
@@ -121,7 +123,7 @@ def write_file(path: pathlib.Path, content: str):
 def create_camera_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
     """Return list of (unit_path, content) for every camera."""
     cores = list(range(_mp.cpu_count()))
-    core_cycle = (c for c in cores)
+    core_cycle = cycle(cores)
     script_path = str((REPO_DIR / "record_camera.py").resolve())
     defaults = config["defaults"]
 
