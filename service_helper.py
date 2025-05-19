@@ -46,7 +46,7 @@ from itertools import cycle
 # ---------------------------------------------------------------------------
 REPO_DIR = pathlib.Path(__file__).resolve().parent
 CAMERAS_CONFIG_PATH = REPO_DIR / "cameras.json"
-BACKUP_CONFIG_PATH = REPO_DIR / "backup.config"
+BACKUP_CONFIG_PATH = REPO_DIR / "backup.json"
 LOCAL_SERVICE_DIR = REPO_DIR / "services"
 LOCAL_TIMER_DIR = REPO_DIR / "timers"
 SYSTEMD_DIR = pathlib.Path("/etc/systemd/system")
