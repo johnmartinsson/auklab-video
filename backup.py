@@ -12,8 +12,8 @@ def load_json(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="backup.config")
-    ap.add_argument("--cameras", default="/etc/camera_recorder/cameras.json")  # only to locate ready dir if you prefer
+    ap.add_argument("--config", default="/home/bsp/Gits/auklab-video/backup.json")
+    ap.add_argument("--cameras", default="/home/bsp/Gits/auklab-video/cameras.json")  # only to locate ready dir if you prefer
     args = ap.parse_args()
     cfg = load_json(args.config)
 

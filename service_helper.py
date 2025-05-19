@@ -61,8 +61,8 @@ Wants=network-online.target
 Type=simple
 Restart=always
 RestartSec=5
-User=dsp
-Group=dsp
+User=bsp
+Group=bsp
 ExecStart=/usr/bin/python3 {script_path} \
           --ip {ip} --station {station} --user {user} --password {password} \
           --segment_time {segment_time} --loglevel {loglevel} \
@@ -80,8 +80,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=dsp
-Group=dsp
+User=bsp
+Group=bsp
 ExecStart=/usr/bin/python3 {exec_path} --config {config_path}
 
 [Install]
