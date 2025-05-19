@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "user": "admin",
+    "password": "password",
+    "segment_time": 600,
+    "loglevel": "info",
+    "output_dir": "/home/bsp/cameras",
+    "rtsp_port": 554,
+    "ffmpeg_path": "/usr/bin/ffmpeg"
+  },
+  "cameras": [
+    {"ip": "192.168.1.100", "station": "ROST6"},
+    {"ip": "192.168.1.164", "station": "TRI2L"},
+    {"ip": "192.168.1.173", "station": "FAR1L"},
+    {"ip": "192.168.1.174", "station": "BONDEN6"},
+    {"ip": "192.168.1.68",  "station": "FAR6"},
+    {"ip": "192.168.1.72",  "station": "TRI6"},
+    {"ip": "192.168.1.74",  "station": "FAR1R"},
+    {"ip": "192.168.1.76",  "station": "ROST2"},
+    {"ip": "192.168.1.81",  "station": "FAR3"},
+    {"ip": "192.168.1.95",  "station": "TRI3"}
+  ]
+}
