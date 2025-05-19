@@ -13,6 +13,7 @@ def load_json(p):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backup_config", default="/home/bsp/Gits/auklab-video/backup.json")
+    ap.add_argument("--cameras_config", default="/home/bsp/Gits/auklab-video/cameras.json")
     args = ap.parse_args()
     cfg = load_json(args.backup_config)
 
