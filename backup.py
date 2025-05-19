@@ -12,10 +12,10 @@ def load_json(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="/home/bsp/Gits/auklab-video/backup.json")
-    ap.add_argument("--cameras", default="/home/bsp/Gits/auklab-video/cameras.json")  # only to locate ready dir if you prefer
+    ap.add_argument("--backup_config", default="/home/bsp/Gits/auklab-video/backup.json")
+    ap.add_argument("--cameras_config", default="/home/bsp/Gits/auklab-video/cameras.json")
     args = ap.parse_args()
-    cfg = load_json(args.config)
+    cfg = load_json(args.backup_config)
 
     ready   = pathlib.Path(cfg["ready_for_backup_dir"])
     target  = pathlib.Path(cfg["nas_target_dir"])
