@@ -1,0 +1,7 @@
+{
+  "ready_for_backup_dir": "/home/bsp/auklab-video/ready_for_backup",
+  "nas_target_dir": "/home/bsp/auklab-video/backup",
+  "rsync_options": ["-a", "--inplace", "--relative", "--info=stats2", "--human-readable"],
+  "success_log_dir": "/home/bsp/auklab-video/camera_backup",
+  "lock_dir":        "/home/bsp/auklab-video/lock/camera_backup"
+}

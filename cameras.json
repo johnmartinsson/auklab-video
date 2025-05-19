@@ -4,7 +4,7 @@
     "password": "password",
     "segment_time": 600,
     "loglevel": "info",
-    "output_dir": "/home/bsp/cameras",
+    "output_dir": "/home/bsp/auklab-video/recording_directory   ",
     "rtsp_port": 554,
     "ffmpeg_path": "/usr/bin/ffmpeg"
   },
