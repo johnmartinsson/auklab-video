@@ -2,7 +2,7 @@
   "defaults": {
     "user": "admin",
     "password": "password",
-    "segment_time": 60,
+    "segment_time": 600,
     "loglevel": "info",
     "output_dir": "/home/bsp/auklab-video/recording_directory",
     "rtsp_port": 554,
