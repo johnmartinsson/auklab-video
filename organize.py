@@ -21,6 +21,7 @@ def main():
 
     out_root = pathlib.Path(cam_cfg["output_dir"])
     ready    = pathlib.Path(cfg["ready_for_backup_dir"])
+    ready.mkdir(parents=True, exist_ok=True)
     thresh   = cam_cfg["segment_time"] * 2
 
     now = time.time()
