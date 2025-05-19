@@ -17,9 +17,9 @@ def gather_synced(success_dir):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="/home/bsp/Gits/auklab-video/backup.json")
+    ap.add_argument("--backup_config", default="/home/bsp/Gits/auklab-video/backup.json")
     args = ap.parse_args()
-    cfg = load_json(args.config)
+    cfg = load_json(args.backup_config)
 
     ready = pathlib.Path(cfg["ready_for_backup_dir"])
     synced = gather_synced(cfg["success_log_dir"])

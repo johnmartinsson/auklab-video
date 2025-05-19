@@ -21,12 +21,12 @@ def extract_date_from_filename(filename, station):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--config",  default="/home/bsp/Gits/auklab-video/backup.json")
-    p.add_argument("--cameras", default="/home/bsp/Gits/auklab-video/cameras.json")
+    p.add_argument("--backup_config",  default="/home/bsp/Gits/auklab-video/backup.json")
+    p.add_argument("--cameras_config", default="/home/bsp/Gits/auklab-video/cameras.json")
     args = p.parse_args()
 
-    cfg      = load_json(args.config)
-    cam_cfg  = load_json(args.cameras)["defaults"]
+    cfg      = load_json(args.backup_config)
+    cam_cfg  = load_json(args.cameras_config)["defaults"]
 
     out_root = pathlib.Path(cam_cfg["output_dir"])
     ready    = pathlib.Path(cfg["ready_for_backup_dir"])
