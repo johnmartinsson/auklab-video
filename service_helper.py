@@ -154,7 +154,7 @@ def create_aux_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
     """organize / backup / cleanup services + timers derived from config."""
     defaults = config["defaults"]
     seg = defaults["segment_time"]
-    interval = seg * 2  # run twice per segment length
+    interval = seg
 
     jobs = [
         ("organize_video", "Organize finished camera segments"),
