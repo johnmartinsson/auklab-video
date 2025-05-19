@@ -45,8 +45,8 @@ from itertools import cycle
 # Constants & paths
 # ---------------------------------------------------------------------------
 REPO_DIR = pathlib.Path(__file__).resolve().parent
-CONFIG_PATH = REPO_DIR / "cameras.json"
-BACKUP_CONFIG = REPO_DIR / "backup.json"
+CAMERAS_CONFIG_PATH = REPO_DIR / "cameras.json"
+BACKUP_CONFIG_PATH = REPO_DIR / "backup.json"
 LOCAL_SERVICE_DIR = REPO_DIR / "services"
 LOCAL_TIMER_DIR = REPO_DIR / "timers"
 SYSTEMD_DIR = pathlib.Path("/etc/systemd/system")
@@ -82,7 +82,7 @@ Wants=network-online.target
 Type=oneshot
 User=bsp
 Group=bsp
-ExecStart=/usr/bin/python3 {exec_path} --config {config_path}
+ExecStart=/usr/bin/python3 {exec_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
 
 [Install]
 WantedBy=multi-user.target
@@ -171,7 +171,8 @@ def create_aux_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
             description=desc,
             user=defaults["user"],
             exec_path=exec_path,
-            config_path=str(BACKUP_CONFIG.resolve()),
+            backup_config_path=str(BACKUP_CONFIG_PATH.resolve()),
+            cameras_config_path=str(CAMERAS_CONFIG_PATH.resolve()),
         )
         timer_content = TIMER_TEMPLATE.format(
             unit_name=f"{name}.service",
@@ -187,7 +188,7 @@ def create_aux_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
 
 def generate_all() -> List[pathlib.Path]:
     """Generate every unit/timer file and return the list of local paths."""
-    cam_cfg = load_json(CONFIG_PATH)
+    cam_cfg = load_json(CAMERAS_CONFIG_PATH)
 
     units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg)
     for path, content in units:
