@@ -237,11 +237,14 @@ def systemctl_cmd(cmd: str, local_paths: List[pathlib.Path]):
         # Start all services immediately
         service_units = [n for n in unit_names if n.endswith(".service") and not n.endswith(".timer")]
         if service_units:
+            print(f"[INFO] Starting {len(service_units)} services...")
+            # Start all services first
             subprocess.run(["systemctl", cmd, *service_units], check=False)
 
         # Start auxiliary timers in the specified order, with 2 min delay between
         for idx, timer in enumerate(aux_timer_order):
             if timer in unit_names:
+                print(f"[INFO] Starting {timer}...")
                 subprocess.run(["systemctl", cmd, timer], check=False)
                 if idx < len(aux_timer_order) - 1:
                     print(f"[INFO] Waiting 2 minutes before starting next timer...")
