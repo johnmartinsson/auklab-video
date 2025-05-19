@@ -39,6 +39,7 @@ import sys
 import textwrap
 from typing import List, Tuple
 from itertools import cycle
+import time
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +225,33 @@ def systemctl_cmd(cmd: str, local_paths: List[pathlib.Path]):
     unit_names = [p.name for p in local_paths if p.suffix == ".service" or p.suffix == ".timer"]
     if not unit_names:
         return
-    subprocess.run(["systemctl", cmd, *unit_names], check=False)
+    
+    # Hardcoded order for auxiliary timers
+    aux_timer_order = [
+        "organize_video.timer",
+        "backup_video.timer",
+        "cleanup_video.timer",
+    ]
+
+    if cmd == "start":
+        # Start all services immediately
+        service_units = [n for n in unit_names if n.endswith(".service") and not n.endswith(".timer")]
+        if service_units:
+            subprocess.run(["systemctl", cmd, *service_units], check=False)
+
+        # Start auxiliary timers in the specified order, with 2 min delay between
+        for idx, timer in enumerate(aux_timer_order):
+            if timer in unit_names:
+                subprocess.run(["systemctl", cmd, timer], check=False)
+                if idx < len(aux_timer_order) - 1:
+                    print(f"[INFO] Waiting 2 minutes before starting next timer...")
+                    time.sleep(120)
+        # Start any other timers not in the list
+        other_timers = [n for n in unit_names if n.endswith(".timer") and n not in aux_timer_order]
+        if other_timers:
+            subprocess.run(["systemctl", cmd, *other_timers], check=False)
+    else:
+        subprocess.run(["systemctl", cmd, *unit_names], check=False)
 
 # ---------------------------------------------------------------------------
 # CLI
