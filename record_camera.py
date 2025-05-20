@@ -64,9 +64,12 @@ def main():
         "-loglevel", args.loglevel,
         "-rtsp_transport", "tcp",
         "-allowed_media_types", "video+audio",
+        "-use_wallclock_as_timestamps", "1",
+        "-max_delay", "100000",
         "-i", rtsp_url,
         "-map", "0:v", "-map", "0:a",
         "-c:v", "copy", "-c:a", "copy",
+        # ------- segmentation options -------
         "-f", "segment", "-reset_timestamps", "1",
         "-segment_time", str(args.segment_time),
         "-segment_atclocktime", "1",
