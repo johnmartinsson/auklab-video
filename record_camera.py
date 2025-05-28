@@ -60,8 +60,21 @@ def main():
 
     ffmpeg_cmd = [
         args.ffmpeg_path,
-        "-hide_banner", "-y",
+
+        # ───────── logging ─────────
+        "-hide_banner",
         "-loglevel", args.loglevel,
+        "-report",                       # writes ffmpeg-20250528-140000.log in CWD
+
+        # ───────── RTSP robustness ─────────
+        # quit if nothing arrives for 30 s → systemd restarts us
+        "-rw_timeout", "30000000",
+        # reconnect helpers (works for TCP & UDP)
+        "-reconnect", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_at_eof", "1",
+
+        # ───────── your original options ─────────
         "-rtsp_transport", "tcp",
         "-allowed_media_types", "video+audio",
         "-use_wallclock_as_timestamps", "1",
@@ -69,11 +82,13 @@ def main():
         "-i", rtsp_url,
         "-map", "0:v", "-map", "0:a",
         "-c:v", "copy", "-c:a", "copy",
-        # ------- segmentation options -------
+
+        # ───────── segmentation ─────────
         "-f", "segment", "-reset_timestamps", "1",
         "-segment_time", str(args.segment_time),
         "-segment_atclocktime", "1",
-        "-segment_format", "mkv", "-strftime", "1",
+        "-segment_format", "mkv",
+        "-strftime", "1",
         fname_pattern,
     ]
 
