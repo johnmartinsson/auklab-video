@@ -58,9 +58,9 @@ def main():
         os.makedirs(args.logs_dir, exist_ok=True)
         os.chdir(args.logs_dir)                         # <-- cwd for report
 
-    os.environ["FFREPORT"] = (
-        f"file={args.station}_%Y%m%dT%H%M%S.log:level=32"
-    ) # FFmpeg log file pattern
+    #os.environ["FFREPORT"] = (
+    #    f"file={args.station}_%Y%m%dT%H%M%S.log:level=32"
+    #) # FFmpeg log file pattern
 
     # Output directory e.g. /home/recordingpi/cameras/ROST2
     out_dir = pathlib.Path(args.output_dir) / args.station
@@ -81,11 +81,11 @@ def main():
 
         # ───────── RTSP robustness ─────────
         # quit if nothing arrives for 30 s → systemd restarts us
-        "-rw_timeout", "30000000",
+        "-timeout", "30000000",
         # reconnect helpers (works for TCP & UDP)
-        "-reconnect", "1",
-        "-reconnect_streamed", "1",
-        "-reconnect_at_eof", "1",
+        #"-reconnect", "1",
+        #"-reconnect_streamed", "1",
+        #"-reconnect_at_eof", "1",
 
         # ───────── your original options ─────────
         "-rtsp_transport", "tcp",

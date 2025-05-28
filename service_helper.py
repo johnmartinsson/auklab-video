@@ -111,8 +111,6 @@ Description=Restart dead camera services if no new file appears
 
 [Service]
 Type=oneshot
-User={user}
-Group={user}
 ExecStart=/usr/bin/python3 {script_path} \
           --recording_dir {recording_dir} --segment_time {segment_time}
 """
