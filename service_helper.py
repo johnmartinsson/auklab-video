@@ -62,12 +62,14 @@ Wants=network-online.target
 Type=simple
 Restart=always
 RestartSec=5
+WorkingDirectory={logs_dir}
 User=bsp
 Group=bsp
 ExecStart=/usr/bin/python3 {script_path} \
           --ip {ip} --station {station} --user {user} --password {password} \
           --segment_time {segment_time} --loglevel {loglevel} \
-          --output_dir {output_dir} --rtsp_port {rtsp_port} --core {core}
+          --output_dir {output_dir} --logs_dir {logs_dir} \
+          --rtsp_port {rtsp_port} --core {core}
 
 [Install]
 WantedBy=multi-user.target
@@ -100,6 +102,32 @@ OnUnitActiveSec={interval}
 [Install]
 WantedBy=timers.target
 """
+
+# -------------------------------------------------------------------
+# Watchdog for "freshness" of recordings
+# -------------------------------------------------------------------
+MONITOR_UNIT_TEMPLATE = """[Unit]
+Description=Restart dead camera services if no new file appears
+
+[Service]
+Type=oneshot
+User={user}
+Group={user}
+ExecStart=/usr/bin/python3 {script_path} \
+          --recording_dir {recording_dir} --segment_time {segment_time}
+"""
+
+MONITOR_TIMER_TEMPLATE = """[Unit]
+Description=Run monitor_recordings.service every 5 min
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+"""
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -142,6 +170,7 @@ def create_camera_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
             segment_time=defaults["segment_time"],
             loglevel=defaults["loglevel"],
             output_dir=defaults["output_dir"],
+            logs_dir=defaults["logs_dir"],
             rtsp_port=defaults["rtsp_port"],
             script_path=script_path,
             core=core,
@@ -186,12 +215,32 @@ def create_aux_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
         ])
     return units
 
+def create_monitor_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
+    defaults = config["defaults"]
+    units = []
+
+    mon_service = LOCAL_SERVICE_DIR / "monitor_recordings.service"
+    mon_timer   = LOCAL_TIMER_DIR   / "monitor_recordings.timer"
+    script_path = str((REPO_DIR / "monitor_recordings.py").resolve())
+
+    units.append((
+        mon_service,
+        MONITOR_UNIT_TEMPLATE.format(
+            user=defaults["user"],
+            script_path=script_path,
+            recording_dir=defaults["output_dir"],
+            segment_time=defaults["segment_time"],
+        ),
+    ))
+    units.append((mon_timer, MONITOR_TIMER_TEMPLATE))
+    return units
+
 
 def generate_all() -> List[pathlib.Path]:
     """Generate every unit/timer file and return the list of local paths."""
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
 
-    units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg)
+    units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
     for path, content in units:
         write_file(path, content)
     return [p for p, _ in units]

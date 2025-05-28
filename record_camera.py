@@ -30,6 +30,8 @@ def parse_args():
     p.add_argument("--ffmpeg_path", default="ffmpeg")
     p.add_argument("--core", type=int, default=None,
                    help="Bind this process to a given CPU core (optional)")
+    p.add_argument("--logs_dir",   default=None,  # use cwd if None
+                   help="Where ffmpeg -report files will be written")
     return p.parse_args()
 
 
@@ -48,6 +50,17 @@ def main():
 
     if args.core is not None:
         set_cpu_affinity(args.core)
+
+    # ------------------------------------------------------------------
+    #  Select working directory for ffmpeg -report
+    # ------------------------------------------------------------------
+    if args.logs_dir:
+        os.makedirs(args.logs_dir, exist_ok=True)
+        os.chdir(args.logs_dir)                         # <-- cwd for report
+
+    os.environ["FFREPORT"] = (
+        f"file={args.station}_%Y%m%dT%H%M%S.log:level=32"
+    ) # FFmpeg log file pattern
 
     # Output directory e.g. /home/recordingpi/cameras/ROST2
     out_dir = pathlib.Path(args.output_dir) / args.station
