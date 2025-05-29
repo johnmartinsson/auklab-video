@@ -193,3 +193,28 @@ journalctl -u record_camera_ROST2.service -f
 Commit the **generated** unit files (`services/`, `timers/`) if you want full reproducibility, or add them to `.gitignore` to keep the repo clean. Either way, the generator is deterministic.&#x20;
 
 ---
+
+## 10. E-mail alerts
+Credentials live in /etc/monitor_email.conf (chmod 600). Example:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=aukLab2025@gmail.com
+SMTP_PASS=<16-char Gmail App Password>
+ALERT_TO=john@example.com,alice@example.com
+```
+
+monitor_recordings.service loads them via
+
+```
+EnvironmentFile=/etc/monitor_email.conf.
+```
+
+Every auto-restart triggers one mail:
+
+```
+Subject: [CAMERA] Auto-restart ROST2
+Body:    ROST2 idle for 1223 s → restarting record_camera_ROST2.service
+         Host: morus-vm  |  Time: 2025-05-28 15:20:10
+```
