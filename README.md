@@ -8,7 +8,7 @@
 - 20250528T153800: Should have continuous .mkv recordings again from May 28 at 15:40, so gap between 20250523T033000 to 20250528T154000
 - 20250529T074400: The log lavel change did not take, restarted all recordings around this time may have lost a bit here
 
-# 📹 AukLab Video Recording Pipeline — Documentation
+# AukLab Video Recording Pipeline — Documentation
 
 This single-node pipeline continuously records RTSP streams from multiple cameras, stores them in time-stamped 10-minute segments, archives the footage to a NAS, and keeps the SD card tidy. Everything is orchestrated by **systemd** units that are generated for you.&#x20;
 
