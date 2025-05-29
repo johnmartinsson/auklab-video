@@ -8,7 +8,7 @@
 - 20250528T153800: Should have continuous .mkv recordings again from May 28 at 15:40, so gap between 20250523T033000 to 20250528T154000
 - 20250529T074400: The log lavel change did not take, restarted all recordings around this time may have lost a bit here
 
-# 📹 AukLab Video Recording Pipeline — Documentation
+# AukLab Video Recording Pipeline — Documentation
 
 This single-node pipeline continuously records RTSP streams from multiple cameras, stores them in time-stamped 10-minute segments, archives the footage to a NAS, and keeps the SD card tidy. Everything is orchestrated by **systemd** units that are generated for you.&#x20;
 
@@ -26,7 +26,7 @@ This single-node pipeline continuously records RTSP streams from multiple camera
 .
 ├── backup_video.py          ← Rsync segments to NAS
 ├── cleanup_video.py         ← Delete segments that are already on NAS
-├── monitor_recordings.py    ← Watch-dog: restart stalled recorders
+├── monitor_recordings.py    ← Watch-dog: restart stalled recorders & email
 ├── organize_video.py        ← Move finished segments into date folders
 ├── record_camera.py         ← Spawn one FFmpeg process per camera
 ├── service_helper.py        ← Generate & manage all *.service / *.timer files
@@ -193,3 +193,28 @@ journalctl -u record_camera_ROST2.service -f
 Commit the **generated** unit files (`services/`, `timers/`) if you want full reproducibility, or add them to `.gitignore` to keep the repo clean. Either way, the generator is deterministic.&#x20;
 
 ---
+
+## 10. E-mail alerts
+Credentials live in /etc/monitor_email.conf (chmod 600). Example:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=aukLab2025@gmail.com
+SMTP_PASS=<16-char Gmail App Password>
+ALERT_TO=john@example.com,alice@example.com
+```
+
+monitor_recordings.service loads them via
+
+```
+EnvironmentFile=/etc/monitor_email.conf.
+```
+
+Every auto-restart triggers one mail:
+
+```
+Subject: [CAMERA] Auto-restart ROST2
+Body:    ROST2 idle for 1223 s → restarting record_camera_ROST2.service
+         Host: morus-vm  |  Time: 2025-05-28 15:20:10
+```
