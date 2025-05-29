@@ -26,7 +26,7 @@ This single-node pipeline continuously records RTSP streams from multiple camera
 .
 ├── backup_video.py          ← Rsync segments to NAS
 ├── cleanup_video.py         ← Delete segments that are already on NAS
-├── monitor_recordings.py    ← Watch-dog: restart stalled recorders
+├── monitor_recordings.py    ← Watch-dog: restart stalled recorders & email
 ├── organize_video.py        ← Move finished segments into date folders
 ├── record_camera.py         ← Spawn one FFmpeg process per camera
 ├── service_helper.py        ← Generate & manage all *.service / *.timer files
