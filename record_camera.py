@@ -77,7 +77,7 @@ def main():
         # ───────── logging ─────────
         "-hide_banner",
         "-loglevel", args.loglevel,
-        "-report",                       # writes ffmpeg-20250528-140000.log in CWD
+        #"-report",                       # writes ffmpeg-20250528-140000.log in CWD
 
         # ───────── RTSP robustness ─────────
         # quit if nothing arrives for 30 s → systemd restarts us
