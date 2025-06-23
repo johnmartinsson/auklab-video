@@ -13,6 +13,13 @@
       "codec_name": "aac",
       "sample_rate": 16000,
       "channels_text": "mono"
+    },
+    "expected_video": {
+      "codec_name": "hevc",
+      "profile": "Main",
+      "width": 2688,
+      "height": 1520,
+      "r_frame_rate": "25/1"
     }
   },
   "cameras": [
