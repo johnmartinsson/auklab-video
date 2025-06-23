@@ -8,6 +8,7 @@
 - 20250528T153800: Should have continuous .mkv recordings again from May 28 at 15:40, so gap between 20250523T033000 to 20250528T154000
 - 20250529T074400: The log level change did not take, restarted all recordings around this time may have lost a bit here
 - 20250623T101000: Detected that camera at ROST6, 192.168.1.100, incorrectly encodes audio as pcm_mulaw, 8000 Hz, mono audio
+- 20250623T114354: Saga updated config, record_camera_ROST6.service restarted automatically, audio now encoded as aac, 16000 Hz
 
 # AukLab Video Recording Pipeline — Documentation
 
