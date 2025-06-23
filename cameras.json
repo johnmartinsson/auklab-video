@@ -3,11 +3,17 @@
     "user": "admin",
     "password": "password",
     "segment_time": 600,
-    "loglevel": "warning",
+    "loglevel": "error",
     "output_dir": "/home/bsp/auklab-video/recording_directory",
     "logs_dir":   "/home/bsp/auklab-video/logs" ,
     "rtsp_port": 554,
-    "ffmpeg_path": "/usr/bin/ffmpeg"
+    "ffmpeg_path": "/usr/bin/ffmpeg",
+    "ffprobe_path": "/usr/bin/ffprobe",
+    "expected_audio": {
+      "codec_name": "aac",
+      "sample_rate": 16000,
+      "channels_text": "mono"
+    }
   },
   "cameras": [
     { "ip": "192.168.1.100", "station": "ROST6" },
