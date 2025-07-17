@@ -11,6 +11,8 @@
 - 20250613T093915: The logs were removed, logging stopped, and all record_camera services restarted.
 - 20250623T101000: Detected that camera at ROST6, 192.168.1.100, incorrectly encodes audio as pcm_mulaw, 8000 Hz, mono audio
 - 20250623T114354: Saga updated config, record_camera_ROST6.service restarted automatically, audio now encoded as aac, 16000 Hz
+- 20250712T052003: NAS went offline which broke backup/clean rutine. NAS went online again around 12 AM.
+- 20250717T133000: Detected that the disk on MorusNew was still filled to 100%. When the NAS went online again the backup routine did not work because it depends on writing a file to disk with the filenames to backup. This meant that the backup/clean rutine was broken until space was made, which was done around 20250717T133000. The reason for the delay was vacation. Space was made by simply removing the buffered recordings. Not the best fix, but the only possible fix given the time contstrains during vacation. We therefore lost 5 days of data.
 
 # AukLab Video Recording Pipeline — Documentation
 
