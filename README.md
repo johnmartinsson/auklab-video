@@ -152,6 +152,8 @@ graph TD
 
 ## 6. Installation & Operation
 
+### Start recording
+
 ```bash
 # 1. Clone & edit configs
 git clone git@github.com:your-org/auklab-video.git
@@ -168,6 +170,16 @@ sudo python3 service_helper.py link start enable
 # 4. Check status
 sudo python3 service_helper.py status
 journalctl -u record_camera_ROST2.service -f
+```
+
+### Stop recording
+```bash
+# 1. Stop all recording and monitoring processes
+sudo python3 service_helper.py stop
+# 2. Disable all recording and monitoring processes
+sudo python3 service_helper.py disable
+# 3. Check status
+sudo python3 service_helper.py status
 ```
 
 *Upgrades*: Pull new commits, re-run `generate` then `link` (it will overwrite units in place). Timers keep running.
