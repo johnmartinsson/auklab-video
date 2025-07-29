@@ -224,3 +224,10 @@ Subject: [CAMERA] Auto-restart ROST2
 Body:    ROST2 idle for 1223 s → restarting record_camera_ROST2.service
          Host: morus-vm  |  Time: 2025-05-28 15:20:10
 ```
+
+To enable/disable simply enable/disable the timer
+
+```
+sudo systemctl disable --now monitor_recordings.timer
+sudo systemctl enable --now monitor_recordings.timer
+```
