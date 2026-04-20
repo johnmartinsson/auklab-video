@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 record_camera.py – thin wrapper that launches one FFmpeg process to capture a
 specific camera. Intended to be run via systemd so that crashes auto‑restart.

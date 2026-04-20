@@ -1,7 +1,7 @@
 {
   "defaults": {
     "user": "admin",
-    "password": "Auklab2008!",
+    "password": "password",
     "segment_time": 600,
     "loglevel": "error",
     "output_dir": "/home/bsp/auklab-video/recording_directory",
