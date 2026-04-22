@@ -42,6 +42,9 @@ def main():
         rel = f.relative_to(ready)
         if str(rel) not in already:
             to_sync.append(rel)
+    # Always re-sync manifests: they grow over time and must stay current on NAS.
+    for f in ready.rglob("*_manifest.csv"):
+        to_sync.append(f.relative_to(ready))
 
     if not to_sync:
         print("[backup] nothing new to sync")

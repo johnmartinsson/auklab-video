@@ -38,6 +38,7 @@ def main():
     for station_dir in out_root.iterdir():
         if not station_dir.is_dir(): continue
         station = station_dir.name
+        had_moves = False
         for f in station_dir.glob("*.mkv"):
             if (now - f.stat().st_mtime) < thresh:       # still being written
                 continue
@@ -48,8 +49,17 @@ def main():
             dest_dir = ready / station / date
             dest_dir.mkdir(parents=True, exist_ok=True)
             shutil.move(str(f), dest_dir / f.name)
+            had_moves = True
             moved += 1
-    print(f"[organize] moved {moved} file(s) → {ready}")
+
+        # Keep one manifest per station at the station level (not per date).
+        # Overwrite on every organize run so the NAS copy stays current.
+        manifest_src = station_dir / f"{station}_manifest.csv"
+        if manifest_src.exists() and had_moves:
+            station_ready = ready / station
+            station_ready.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(manifest_src, station_ready / f"{station}_manifest.csv")
+    print(f"[organize] moved {moved} video file(s) → {ready}")
     sys.exit(0)
 
 if __name__ == "__main__":

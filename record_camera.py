@@ -69,6 +69,7 @@ def main():
 
     # Build filename pattern with station prefix
     fname_pattern = str(out_dir / (f"{args.station}_%Y%m%dT%H%M%S.mkv"))
+    segment_list = str(out_dir / f"{args.station}_manifest.csv")
 
     rtsp_url = f"rtsp://{args.user}:{args.password}@{args.ip}:{args.rtsp_port}/Streaming/Channels/101"
 
@@ -91,16 +92,23 @@ def main():
         # ───────── your original options ─────────
         "-rtsp_transport", "tcp",
         "-allowed_media_types", "video+audio",
+        "-fflags", "+genpts+igndts+discardcorrupt",
         "-use_wallclock_as_timestamps", "1",
         "-max_delay", "100000",
         "-i", rtsp_url,
         "-map", "0:v", "-map", "0:a",
         "-c:v", "copy", "-c:a", "copy",
+        "-copyts",
+        "-copytb", "1",
+        "-avoid_negative_ts", "disabled",
 
         # ───────── segmentation ─────────
-        "-f", "segment", "-reset_timestamps", "1",
+        "-f", "segment", "-reset_timestamps", "0",
         "-segment_time", str(args.segment_time),
+        "-segment_time_delta", "0.05",
         "-segment_atclocktime", "1",
+        "-segment_list", segment_list,
+        "-segment_list_type", "csv",
         "-segment_format", "mkv",
         "-strftime", "1",
         fname_pattern,

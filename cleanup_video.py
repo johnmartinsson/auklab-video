@@ -33,6 +33,8 @@ def main():
                 removed +=1
             except FileNotFoundError:
                 pass
+    # Manifests are never deleted locally – they are living files that grow
+    # across the season and are always re-synced by backup_video.py.
     print(f"[remove] deleted {removed} files")
     # prune empty dirs
     for d in sorted(ready.rglob("*"), reverse=True):
