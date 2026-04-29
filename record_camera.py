@@ -25,6 +25,7 @@ def parse_args():
     p.add_argument("--user", required=True)
     p.add_argument("--password", required=True)
     p.add_argument("--segment_time", type=int, default=600)
+    p.add_argument("--segment_format", default="mkv", choices=["mkv", "mp4"], help="Container format for each segment")
     p.add_argument("--loglevel", default="info")
     p.add_argument("--output_dir", default="/home/recordingpi/cameras")
     p.add_argument("--rtsp_port", type=int, default=554)
@@ -109,7 +110,7 @@ def main():
         "-segment_atclocktime", "1",
         "-segment_list", segment_list,
         "-segment_list_type", "csv",
-        "-segment_format", "mkv",
+        "-segment_format", args.segment_format,
         "-strftime", "1",
         fname_pattern,
     ]
