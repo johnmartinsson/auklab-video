@@ -10,15 +10,23 @@ import argparse, datetime as _dt, json, os, pathlib, subprocess, sys, fcntl
 def load_json(p): 
     with open(p) as fh: return json.load(fh)
 
+def gather_synced(success_dir: pathlib.Path):
+    synced = set()
+    for log in success_dir.glob("*.synced"):
+        synced.update(p.strip() for p in log.read_text().splitlines() if p.strip())
+    return synced
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backup_config", default="/home/bsp/Gits/auklab-video/backup.json")
     ap.add_argument("--cameras_config", default="/home/bsp/Gits/auklab-video/cameras.json")
     args = ap.parse_args()
     cfg = load_json(args.backup_config)
+    cam_defaults = load_json(args.cameras_config)["defaults"]
+    extension = cam_defaults.get("segment_format", "mkv")
 
     ready   = pathlib.Path(cfg["ready_for_backup_dir"])
-    target  = pathlib.Path(cfg["nas_target_dir"])
+    target  = cfg["nas_target_dir"]
     success_dir = pathlib.Path(cfg["success_log_dir"])
     success_dir.mkdir(parents=True, exist_ok=True)
     today_log = success_dir / ( _dt.date.today().isoformat() + ".synced" )
@@ -33,12 +41,10 @@ def main():
         print("[backup] another instance is running – abort")
         sys.exit(0)
 
-    already = set()
-    if today_log.exists():
-        already.update(p.strip() for p in today_log.read_text().splitlines())
+    already = gather_synced(success_dir)
 
     to_sync = []
-    for f in ready.rglob("*.mkv"):
+    for f in ready.rglob(f"*.{extension}"):
         rel = f.relative_to(ready)
         if str(rel) not in already:
             to_sync.append(rel)

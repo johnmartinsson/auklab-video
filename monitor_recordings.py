@@ -82,8 +82,8 @@ def check_disk_space(path="/", threshold=DISK_USAGE_THRESHOLD):
             logging.info(f"Disk usage back to normal: {percent_used:.1f}%")
 
 # --- File Modification Check ---
-def newest_mtime(dir_: pathlib.Path):
-    mts = [f.stat().st_mtime for f in dir_.glob("*.mkv")]
+def newest_mtime(dir_: pathlib.Path, segment_format: str):
+    mts = [f.stat().st_mtime for f in dir_.glob(f"*.{segment_format}")]
     return max(mts) if mts else 0
 
 # --- Main Logic ---
@@ -95,9 +95,11 @@ def main():
     p.add_argument("--segment_time", type=int, default=600)
     p.add_argument("--multiplier", type=int, default=2,
                    help="threshold = segment_time × multiplier")
+    p.add_argument("--segment_format", default="mkv")
+    p.add_argument("--disk_usage_threshold", type=int, default=DISK_USAGE_THRESHOLD)
     args = p.parse_args()
 
-    check_disk_space("/")
+    check_disk_space(args.recording_dir, threshold=args.disk_usage_threshold)
 
     thresh = args.segment_time * args.multiplier
     now = time.time()
@@ -110,7 +112,7 @@ def main():
     for station_dir in root.iterdir():
         if not station_dir.is_dir():
             continue
-        last = newest_mtime(station_dir)
+        last = newest_mtime(station_dir, args.segment_format)
         age = now - last
 
         if age > thresh:

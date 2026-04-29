@@ -68,6 +68,7 @@ Group=bsp
 ExecStart=/usr/bin/python3 {script_path} \
           --ip {ip} --station {station} --user {user} --password {password} \
           --segment_time {segment_time} --loglevel {loglevel} \
+          --segment_format {segment_format} \
           --output_dir {output_dir} --logs_dir {logs_dir} \
           --rtsp_port {rtsp_port} --core {core}
 
@@ -113,7 +114,8 @@ Description=Restart dead camera services if no new file appears
 Type=oneshot
 EnvironmentFile=/etc/monitor_email.conf
 ExecStart=/usr/bin/python3 {script_path} \
-          --recording_dir {recording_dir} --segment_time {segment_time}
+          --recording_dir {recording_dir} --segment_time {segment_time} \
+          --segment_format {segment_format}
 """
 
 MONITOR_TIMER_TEMPLATE = """[Unit]
@@ -168,6 +170,7 @@ def create_camera_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
             password=defaults["password"],
             segment_time=defaults["segment_time"],
             loglevel=defaults["loglevel"],
+            segment_format=defaults.get("segment_format", "mkv"),
             output_dir=defaults["output_dir"],
             logs_dir=defaults["logs_dir"],
             rtsp_port=defaults["rtsp_port"],
@@ -229,6 +232,7 @@ def create_monitor_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
             script_path=script_path,
             recording_dir=defaults["output_dir"],
             segment_time=defaults["segment_time"],
+            segment_format=defaults.get("segment_format", "mkv"),
         ),
     ))
     units.append((mon_timer, MONITOR_TIMER_TEMPLATE))

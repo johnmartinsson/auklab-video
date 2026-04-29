@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Move finished segments from <output_dir>/<station>/FILE.mkv
-               to  <ready_for_backup>/<station>/<YYYY-MM-DD>/FILE.mkv
+Move finished segments from <output_dir>/<station>/FILE.<ext>
+               to  <ready_for_backup>/<station>/<YYYY-MM-DD>/FILE.<ext>
 
-A file is “finished” when mtime is older than 2×segment_time seconds.
+A file is "finished" when mtime is older than 2xsegment_time seconds.
 """
 import argparse, json, os, pathlib, shutil, sys, time, datetime as _dt
 import re
@@ -11,9 +11,9 @@ import re
 def load_json(path):
     with open(path) as fh: return json.load(fh)
 
-def extract_date_from_filename(filename, station):
-    # Pattern: <station>_YYYYMMDDTHHMMSS.mkv
-    pattern = rf"^{re.escape(station)}_(\d{{8}})T\d{{6}}\.mkv$"
+def extract_date_from_filename(filename, station, extension):
+    # Pattern: <station>_YYYYMMDDTHHMMSS.<ext>
+    pattern = rf"^{re.escape(station)}_(\d{{8}})T\d{{6}}\.{re.escape(extension)}$"
     m = re.match(pattern, filename)
     if m:
         return f"{m.group(1)[:4]}-{m.group(1)[4:6]}-{m.group(1)[6:8]}"
@@ -32,30 +32,29 @@ def main():
     ready    = pathlib.Path(cfg["ready_for_backup_dir"])
     ready.mkdir(parents=True, exist_ok=True)
     thresh   = cam_cfg["segment_time"] * 2
+    extension = cam_cfg.get("segment_format", "mkv")
 
     now = time.time()
     moved = 0
     for station_dir in out_root.iterdir():
         if not station_dir.is_dir(): continue
         station = station_dir.name
-        had_moves = False
-        for f in station_dir.glob("*.mkv"):
+        for f in station_dir.glob(f"*.{extension}"):
             if (now - f.stat().st_mtime) < thresh:       # still being written
                 continue
-            date = extract_date_from_filename(f.name, station)
+            date = extract_date_from_filename(f.name, station, extension)
             if not date:
                 print(f"[organize][WARN] Could not extract date from filename '{f.name}', using mtime instead.", file=sys.stderr)
                 date = _dt.datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
             dest_dir = ready / station / date
             dest_dir.mkdir(parents=True, exist_ok=True)
             shutil.move(str(f), dest_dir / f.name)
-            had_moves = True
             moved += 1
 
         # Keep one manifest per station at the station level (not per date).
         # Overwrite on every organize run so the NAS copy stays current.
         manifest_src = station_dir / f"{station}_manifest.csv"
-        if manifest_src.exists() and had_moves:
+        if manifest_src.exists():
             station_ready = ready / station
             station_ready.mkdir(parents=True, exist_ok=True)
             shutil.copy2(manifest_src, station_ready / f"{station}_manifest.csv")
