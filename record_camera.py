@@ -104,7 +104,7 @@ def main():
         "-avoid_negative_ts", "disabled",
 
         # ───────── segmentation ─────────
-        "-f", "segment", "-reset_timestamps", "0",
+        "-f", "segment", "-reset_timestamps", "1",
         "-segment_time", str(args.segment_time),
         "-segment_time_delta", "0.05",
         "-segment_atclocktime", "1",
