@@ -37,7 +37,11 @@ def send_email(subject: str, body: str) -> None:
     port = int(os.getenv("SMTP_PORT", 587))
     user = os.getenv("SMTP_USER")
     pwd = os.getenv("SMTP_PASS")
-    rcpt = os.getenv("ALERT_TO", user).split(",")
+    rcpt_env = os.getenv("ALERT_TO")
+    if rcpt_env:
+        rcpt =[addr.strip() for addr in rcpt_env.split(",") if addr.strip()]
+    else:
+        rcpt = [user]
 
     if not (host and user and pwd):
         logging.warning("Email config incomplete — skipping alert.")
@@ -83,7 +87,7 @@ def check_disk_space(path="/", threshold=DISK_USAGE_THRESHOLD):
 
 # --- File Modification Check ---
 def newest_mtime(dir_: pathlib.Path, segment_format: str):
-    mts = [f.stat().st_mtime for f in dir_.glob(f"*.{segment_format}")]
+    mts =[f.stat().st_mtime for f in dir_.glob(f"*.{segment_format}")]
     return max(mts) if mts else 0
 
 # --- Main Logic ---
@@ -112,25 +116,45 @@ def main():
     for station_dir in root.iterdir():
         if not station_dir.is_dir():
             continue
+            
         last = newest_mtime(station_dir, args.segment_format)
         age = now - last
+        
+        # Define a unique flag file for this specific camera
+        flag_file = pathlib.Path(f"/tmp/.camera_warning_sent_{station_dir.name}")
 
         if age > thresh:
             unit = f"record_camera_{station_dir.name}.service"
             warn = f"{station_dir.name} idle for {age:.0f}s → restarting {unit}"
             logging.warning(warn)
 
+            # We continue to restart the service every time the script runs (e.g. every 5 mins)
             subprocess.run(["/usr/bin/systemctl", "restart", unit], check=False)
             logging.info(f"Restarted {unit}")
 
-            send_email(
-                subject=f"[CAMERA] Auto-restart {station_dir.name}",
-                body=f"{warn}\nHost: {os.uname().nodename}\nTime: {time.ctime(now)}",
-            )
+            # Only send the email if we haven't already sent one
+            if not flag_file.exists():
+                send_email(
+                    subject=f"[CAMERA DOWN] Auto-restart {station_dir.name}",
+                    body=f"{warn}\nHost: {os.uname().nodename}\nTime: {time.ctime(now)}",
+                )
+                flag_file.touch() # Create the flag to silence future emails
+                
+        else:
+            # Camera is producing files normally (age <= thresh)
+            if flag_file.exists():
+                # The camera was down, but has now recovered!
+                flag_file.unlink() # Delete the flag file so it can alert again next time
+                logging.info(f"{station_dir.name} has recovered. Cleared warning flag.")
+                
+                # Optional: Send a helpful "All clear" email
+                send_email(
+                    subject=f"[CAMERA RECOVERED] {station_dir.name} is back online",
+                    body=f"Camera {station_dir.name} is producing files normally again.\nHost: {os.uname().nodename}\nTime: {time.ctime(now)}",
+                )
 
     logging.info("monitor_recordings check complete.")
     return 0
 
 if __name__ == "__main__":
     sys.exit(main())
-
