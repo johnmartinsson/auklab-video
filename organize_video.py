@@ -31,7 +31,7 @@ def main():
     out_root = pathlib.Path(cam_cfg["output_dir"])
     ready    = pathlib.Path(cfg["ready_for_backup_dir"])
     ready.mkdir(parents=True, exist_ok=True)
-    thresh   = cam_cfg["segment_time"] * 2
+    thresh   = cam_cfg["segment_time"] + 60
     extension = cam_cfg.get("segment_format", "mkv")
 
     now = time.time()
