@@ -326,8 +326,9 @@ def main():
                 cam_state["status"] = "healthy"
                 cam_state["last_seen_file_at"] = state_timestamp(last)
 
-    if now_local.tm_hour == args.summary_hour:
-        today = time.strftime("%Y-%m-%d", now_local)
+    today = time.strftime("%Y-%m-%d", now_local)
+    never_sent = state.get("last_daily_summary_date") is None
+    if never_sent or now_local.tm_hour == args.summary_hour:
         if state.get("last_daily_summary_date") != today and current_down_cameras:
             LOGGER.warning(
                 "event=CAMERA_DOWN_SUMMARY count=%s summary_hour=%s",
