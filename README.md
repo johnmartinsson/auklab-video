@@ -97,7 +97,7 @@ Each script is a thin, single-purpose command-line tool so you can run it manual
 | **`organize_video.py`**     | Moves *completed* segments (older than **2 × segment\_time**) from the live output dir into `ready_for_backup/STATION/YYYY-MM-DD/`.                                                                         | `--backup_config`, `--cameras_config`                                                                | Reads `cameras.json`, moves files, creates date folders.  |
 | **`backup_video.py`**       | Rsyncs everything in `ready_for_backup` that is **not yet listed** in the current day’s `.synced` log to the NAS. Adds a simple file lock to avoid overlapping runs.                                        | `--backup_config`                                                                                    | Reads & appends to `success_log_dir/YYYY-MM-DD.synced`.   |
 | **`cleanup_video.py`**      | Deletes local segments that already appear in any `*.synced` log, then prunes empty directories. Run **after** backup.                                                                                      | `--backup_config`                                                                                    | Reads `.synced` logs, unlinks local files.                |
-| **`monitor_recordings.py`** | Every 5 min: checks the newest `.mkv` in each `STATION/` dir. If no new file landed within `segment_time × multiplier` seconds (default = 20 min), it restarts the corresponding `record_camera_*.service`. | `--recording_dir`, `--segment_time`, `--multiplier`                                                  | Calls `systemctl restart …`.                              |
+| **`monitor_recordings.py`** | Every 5 min: checks the newest `.mkv` in each `STATION/` dir. If no new file landed within `segment_time × multiplier` seconds (default = 20 min), it restarts the corresponding `record_camera_*.service`, tracks `DOWN` / `DOWN restart failed` / `RECOVERED`, and sends a daily 8AM summary if any cameras remain down. | `--recording_dir`, `--segment_time`, `--multiplier`, `--logs_dir`                                    | Calls `systemctl restart …`, writes `monitor_recordings.log`. |
 | **`service_helper.py`**     | Autogenerates all \*.service / \*.timer files **locally**, optional symlink into `/etc/systemd/system`, and can bulk-start/enable them.                                                                     | `generate`, `link`, `start`, `stop`, `enable`, `disable`, `status`                                   | Writes to `services/`, `timers/`, invokes `systemctl`.    |
 
 ---
@@ -229,11 +229,24 @@ monitor_recordings.service loads them via
 EnvironmentFile=/etc/monitor_email.conf.
 ```
 
-Every auto-restart triggers one mail:
+Camera health mails now cover these transitions:
 
 ```
-Subject: [CAMERA] Auto-restart ROST2
-Body:    ROST2 idle for 1223 s → restarting record_camera_ROST2.service
+[CAMERA DOWN] Auto restart STATION
+[CAMERA DOWN] Auto restart failed STATION
+[CAMERA RECOVERED] STATION
+```
+
+At 8AM local time, the monitor also sends one summary mail if any cameras are still down.
+
+The monitor writes its own logfile to `logs_dir/monitor_recordings.log` and persists alert state in `logs_dir/monitor_recordings_state.json`.
+
+Initial auto-restart mail example:
+
+```
+Subject: [CAMERA DOWN] Auto restart ROST2
+Body:    Camera ROST2 has not produced a new .mkv file for 1223 seconds.
+         Attempted restart of record_camera_ROST2.service with return code 0.
          Host: morus-vm  |  Time: 2025-05-28 15:20:10
 ```
 
