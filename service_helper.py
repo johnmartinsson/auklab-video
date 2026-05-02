@@ -469,6 +469,21 @@ def unit_state(unit_name: str) -> str:
     return r.stdout.strip() or "unknown"
 
 
+def load_monitor_health() -> dict:
+    """Load camera health from monitor_recordings_state.json if available."""
+    try:
+        cam_cfg = load_json(CAMERAS_CONFIG_PATH)
+        logs_dir = cam_cfg["defaults"]["logs_dir"]
+        state_path = pathlib.Path(logs_dir) / "monitor_recordings_state.json"
+        if not state_path.exists():
+            return {}
+        with state_path.open() as fh:
+            state = json.load(fh)
+        return state.get("cameras", {})
+    except (KeyError, OSError, json.JSONDecodeError):
+        return {}
+
+
 def status_marker(unit_name: str, state: str) -> str:
     """Map systemd states to a readable marker for the compact status table."""
     if state in {"active", "waiting"}:
@@ -481,7 +496,8 @@ def status_marker(unit_name: str, state: str) -> str:
 
 
 def print_status_summary(local_paths: List[pathlib.Path]):
-    """Print a compact ✓/✗ status table grouped by cameras then infrastructure."""
+    """Print systemd state plus monitor health for cameras when available."""
+    monitor_health = load_monitor_health()
     camera_services = sorted(
         [p for p in local_paths if p.name.startswith("record_camera_") and p.suffix == ".service"],
         key=lambda p: p.name,
@@ -492,18 +508,21 @@ def print_status_summary(local_paths: List[pathlib.Path]):
     )
 
     col = 36
-    print(f"\n{'UNIT':<{col}} STATE")
-    print("-" * (col + 10))
+    health_col = 16
+    print(f"\n{'UNIT':<{col}} {'SYSTEMD':<12} {'MONITOR':<{health_col}}")
+    print("-" * (col + 12 + health_col + 2))
     for p in camera_services:
         state = unit_state(p.name)
         marker = status_marker(p.name, state)
-        print(f"  {marker} {p.name:<{col-4}} {state}")
+        station = p.stem.removeprefix("record_camera_")
+        monitor_state = monitor_health.get(station, {}).get("status", "unknown")
+        print(f"  {marker} {p.name:<{col-4}} {state:<12} {monitor_state:<{health_col}}")
     if other_units:
         print()
         for p in other_units:
             state = unit_state(p.name)
             marker = status_marker(p.name, state)
-            print(f"  {marker} {p.name:<{col-4}} {state}")
+            print(f"  {marker} {p.name:<{col-4}} {state:<12} {'n/a':<{health_col}}")
     print()
 
 
