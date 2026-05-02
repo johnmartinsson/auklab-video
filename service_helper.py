@@ -469,6 +469,17 @@ def unit_state(unit_name: str) -> str:
     return r.stdout.strip() or "unknown"
 
 
+def status_marker(unit_name: str, state: str) -> str:
+    """Map systemd states to a readable marker for the compact status table."""
+    if state in {"active", "waiting"}:
+        return "✓"
+    if state == "activating":
+        return "~"
+    if unit_name.endswith(".service") and not unit_name.startswith("record_camera_") and state == "inactive":
+        return "✓"
+    return "✗"
+
+
 def print_status_summary(local_paths: List[pathlib.Path]):
     """Print a compact ✓/✗ status table grouped by cameras then infrastructure."""
     camera_services = sorted(
@@ -485,13 +496,13 @@ def print_status_summary(local_paths: List[pathlib.Path]):
     print("-" * (col + 10))
     for p in camera_services:
         state = unit_state(p.name)
-        marker = "✓" if state == "active" else "✗"
+        marker = status_marker(p.name, state)
         print(f"  {marker} {p.name:<{col-4}} {state}")
     if other_units:
         print()
         for p in other_units:
             state = unit_state(p.name)
-            marker = "✓" if state in {"active", "waiting"} else "✗"
+            marker = status_marker(p.name, state)
             print(f"  {marker} {p.name:<{col-4}} {state}")
     print()
 
