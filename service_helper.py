@@ -36,7 +36,6 @@ import os
 import pathlib
 import subprocess
 import sys
-import textwrap
 from typing import List, Tuple
 from itertools import cycle
 import time
@@ -112,10 +111,13 @@ Description=Restart dead camera services if no new file appears
 
 [Service]
 Type=oneshot
+User=bsp
+Group=bsp
+WorkingDirectory={logs_dir}
 EnvironmentFile=/etc/monitor_email.conf
 ExecStart=/usr/bin/python3 {script_path} \
           --recording_dir {recording_dir} --segment_time {segment_time} \
-          --segment_format {segment_format}
+          --segment_format {segment_format} --logs_dir {logs_dir}
 """
 
 MONITOR_TIMER_TEMPLATE = """[Unit]
@@ -233,6 +235,7 @@ def create_monitor_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
             recording_dir=defaults["output_dir"],
             segment_time=defaults["segment_time"],
             segment_format=defaults.get("segment_format", "mkv"),
+            logs_dir=defaults["logs_dir"],
         ),
     ))
     units.append((mon_timer, MONITOR_TIMER_TEMPLATE))
@@ -299,7 +302,7 @@ def systemctl_cmd(cmd: str, local_paths: List[pathlib.Path]):
                 print(f"[INFO] Starting {timer}...")
                 subprocess.run(["systemctl", cmd, timer], check=False)
                 if idx < len(aux_timer_order) - 1:
-                    print(f"[INFO] Waiting 2 minutes before starting next timer...")
+                    print("[INFO] Waiting 2 minutes before starting next timer...")
                     time.sleep(120)
         # Start any other timers not in the list
         other_timers = [n for n in unit_names if n.endswith(".timer") and n not in aux_timer_order]
