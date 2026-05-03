@@ -69,8 +69,8 @@ Common workflows
   # Deploy only cameras newly added to cameras.json:
   sudo python3 service_helper.py deploy --new
 
-    # Redeploy only cameras with changed settings (e.g. IP updates):
-    sudo python3 service_helper.py deploy --changed
+  # Redeploy only cameras with changed settings (e.g. IP updates):
+  sudo python3 service_helper.py deploy --changed
 
   # Push a config change and reload all running services:
   python3 service_helper.py generate
