@@ -556,7 +556,7 @@ def print_status_summary(local_paths: List[pathlib.Path]):
 # Prune & deploy
 # ---------------------------------------------------------------------------
 
-def prune(stations: List[str]):
+def prune(stations: List[str], dry_run: bool = False):
     """Remove units for cameras that no longer exist in cameras.json.
 
     For each stale record_camera_<STATION>.service found in ./services:
@@ -581,6 +581,11 @@ def prune(stations: List[str]):
 
     if not stale:
         print("[PRUNE] Nothing to prune – all units match cameras.json")
+        return
+
+    if dry_run:
+        for station, path in sorted(stale):
+            print(f"[DRY-RUN] Would prune: {path.name} (stop, disable, unlink, delete)")
         return
 
     for station, path in sorted(stale):
@@ -849,7 +854,7 @@ def main():
         return
 
     if args.action == "prune":
-        prune(args.station)
+        prune(args.station, dry_run=args.dry_run)
         return
 
     if args.action == "deploy":
