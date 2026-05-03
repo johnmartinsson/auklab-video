@@ -352,6 +352,12 @@ def generate_all() -> List[pathlib.Path]:
 
     units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
     for path, content in units:
+        try:
+            existing = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            existing = None
+        if existing == content:
+            continue
         write_file(path, content)
     return [p for p, _ in units]
 
@@ -760,7 +766,11 @@ def deploy(
 
         print(f"[DRY-RUN] selector={selector}")
         print(f"[DRY-RUN] include_infra={include_infra}")
-        print(f"[DRY-RUN] Would generate {len(all_units)} unit/timer file(s) in {LOCAL_SERVICE_DIR} and {LOCAL_TIMER_DIR}.")
+        changed_units = [
+            (p, c) for p, c in all_units
+            if not p.exists() or p.read_text(encoding="utf-8") != c
+        ]
+        print(f"[DRY-RUN] Would write {len(changed_units)} changed/new unit/timer file(s) (of {len(all_units)} total) in {LOCAL_SERVICE_DIR} and {LOCAL_TIMER_DIR}.")
         print(f"[DRY-RUN] Would link {len(target_paths)} unit/timer file(s) into {SYSTEMD_DIR} and run daemon-reload.")
         if unit_names:
             print(f"[DRY-RUN] Would enable: {', '.join(unit_names)}")
@@ -773,7 +783,12 @@ def deploy(
         return
 
     for path, content in all_units:
-        write_file(path, content)
+        try:
+            existing = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            existing = None
+        if existing != content:
+            write_file(path, content)
 
     symlink_units(target_paths)
     subprocess.run(["systemctl", "enable", *unit_names], check=False)
