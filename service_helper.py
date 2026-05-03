@@ -33,6 +33,10 @@ Actions
 
   deploy            generate + link + enable + start in one shot.
                     Use --station to scope to specific cameras only.
+                    Use --new to target cameras added in config but not
+                    yet linked/deployed.
+                    Use --changed to target cameras whose deployed unit
+                    content differs from current config-derived content.
                     Use --force to restart units that are already active
                     (required when picking up config changes).
 
@@ -61,6 +65,12 @@ Common workflows
   # Add two new cameras (edit cameras.json first):
   python3 service_helper.py generate
   sudo python3 service_helper.py deploy --station NEWCAM1 NEWCAM2
+
+  # Deploy only cameras newly added to cameras.json:
+  sudo python3 service_helper.py deploy --new
+
+    # Redeploy only cameras with changed settings (e.g. IP updates):
+    sudo python3 service_helper.py deploy --changed
 
   # Push a config change and reload all running services:
   python3 service_helper.py generate
@@ -576,7 +586,66 @@ def prune(stations: List[str]):
     print(f"[PRUNE] Done – removed {len(stale)} stale unit(s)")
 
 
-def deploy(stations: List[str], force: bool = False):
+def is_station_linked(station: str) -> bool:
+    """Return True if record_camera_<station>.service is linked from /etc/systemd/system."""
+    dest = SYSTEMD_DIR / f"record_camera_{station}.service"
+    expected_src = (LOCAL_SERVICE_DIR / f"record_camera_{station}.service").resolve()
+    if not dest.is_symlink():
+        return False
+    try:
+        return dest.resolve() == expected_src
+    except OSError:
+        return False
+
+
+def compute_new_stations(cam_cfg: dict) -> List[str]:
+    """Return stations present in cameras.json but not linked/deployed yet."""
+    stations = [cam["station"] for cam in cam_cfg["cameras"]]
+    return sorted([s for s in stations if not is_station_linked(s)])
+
+
+def compute_changed_stations(all_units: List[Tuple[pathlib.Path, str]]) -> List[str]:
+    """Return stations whose deployed unit content differs from generated content.
+
+    This compares generated record_camera_<STATION>.service content (derived from
+    current cameras.json) against the currently deployed unit file behind
+    /etc/systemd/system/record_camera_<STATION>.service.
+
+    Notes:
+      - Cameras not yet linked are treated as "new" (handled by --new), not changed.
+      - If a linked unit cannot be read, it is treated as changed to be safe.
+    """
+    expected_by_station = {}
+    for path, content in all_units:
+        if path.name.startswith("record_camera_") and path.suffix == ".service":
+            station = path.stem.removeprefix("record_camera_")
+            expected_by_station[station] = content
+
+    changed = []
+    for station, expected in sorted(expected_by_station.items()):
+        dest = SYSTEMD_DIR / f"record_camera_{station}.service"
+        if not dest.is_symlink():
+            continue
+
+        try:
+            deployed_path = dest.resolve()
+            deployed_content = deployed_path.read_text()
+        except OSError:
+            changed.append(station)
+            continue
+
+        if deployed_content != expected:
+            changed.append(station)
+
+    return changed
+
+
+def deploy(
+    stations: List[str],
+    force: bool = False,
+    only_new: bool = False,
+    only_changed: bool = False,
+):
     """Full deployment pipeline: generate → link → daemon-reload → enable → start.
 
     Parameters
@@ -588,6 +657,12 @@ def deploy(stations: List[str], force: bool = False):
         If True, restart units even if already active.  Use this whenever
         cameras.json or a script has changed and you need the running
         service to pick up the new configuration.
+    only_new : bool
+        If True, auto-select stations that exist in cameras.json but are not
+        yet linked into /etc/systemd/system by this helper.
+    only_changed : bool
+        If True, auto-select stations where deployed camera unit content
+        differs from current config-derived content.
 
     Examples
     --------
@@ -603,8 +678,37 @@ def deploy(stations: List[str], force: bool = False):
 
     # Reload config for one camera only:
       sudo python3 service_helper.py deploy --force --station ROST2
+
+    # Deploy only cameras newly added to cameras.json:
+      sudo python3 service_helper.py deploy --new
+
+    # Redeploy only cameras with changed settings (e.g. IP updates):
+      sudo python3 service_helper.py deploy --changed
     """
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
+    all_units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
+
+    selectors = int(bool(stations)) + int(only_new) + int(only_changed)
+    if selectors > 1:
+        print("[ERROR] Use only one selector: --station OR --new OR --changed.", file=sys.stderr)
+        sys.exit(1)
+
+    if only_new:
+        stations = compute_new_stations(cam_cfg)
+        if not stations:
+            print("[DEPLOY] No new cameras found (all are already linked).")
+            return
+        print(f"[DEPLOY] Auto-selected new camera(s): {', '.join(stations)}")
+
+    if only_changed:
+        stations = compute_changed_stations(all_units)
+        if not stations:
+            print("[DEPLOY] No changed cameras found.")
+            return
+        print(f"[DEPLOY] Auto-selected changed camera(s): {', '.join(stations)}")
+        if not force:
+            print("[DEPLOY] --changed implies restart of selected camera units; enabling --force.")
+            force = True
 
     if stations:
         known = {c["station"] for c in cam_cfg["cameras"]}
@@ -613,8 +717,6 @@ def deploy(stations: List[str], force: bool = False):
             print(f"[ERROR] Unknown station(s): {', '.join(sorted(unknown))}", file=sys.stderr)
             print(f"        Known: {', '.join(sorted(known))}", file=sys.stderr)
             sys.exit(1)
-
-    all_units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
 
     for path, content in all_units:
         write_file(path, content)
@@ -652,7 +754,18 @@ def main():
         "--force", action="store_true",
         help="With deploy: restart units even if already active (picks up config changes).",
     )
+    parser.add_argument(
+        "--new", action="store_true",
+        help="With deploy: target only cameras that are in config but not yet linked/deployed.",
+    )
+    parser.add_argument(
+        "--changed", action="store_true",
+        help="With deploy: target only cameras whose deployed unit differs from current config.",
+    )
     args = parser.parse_args()
+
+    if (args.new or args.changed) and args.action != "deploy":
+        parser.error("--new and --changed can only be used with the deploy action")
 
     if args.action == "generate":
         generate_all()
@@ -663,7 +776,12 @@ def main():
         return
 
     if args.action == "deploy":
-        deploy(args.station, force=args.force)
+        deploy(
+            args.station,
+            force=args.force,
+            only_new=args.new,
+            only_changed=args.changed,
+        )
         return
 
     # Every other action requires units to exist first
