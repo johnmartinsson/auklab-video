@@ -846,8 +846,10 @@ def main():
     )
     args = parser.parse_args()
 
-    if (args.new or args.changed or args.dry_run or args.with_infra) and args.action != "deploy":
-        parser.error("--new, --changed, --dry-run, and --with-infra can only be used with the deploy action")
+    if (args.new or args.changed or args.with_infra) and args.action != "deploy":
+        parser.error("--new, --changed, and --with-infra can only be used with the deploy action")
+    if args.dry_run and args.action not in {"deploy", "prune"}:
+        parser.error("--dry-run can only be used with the deploy or prune action")
 
     if args.action == "generate":
         generate_all()
