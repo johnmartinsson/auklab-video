@@ -37,6 +37,8 @@ Actions
                     yet linked/deployed.
                     Use --changed to target cameras whose deployed unit
                     content differs from current config-derived content.
+                    Scoped deploys are camera-only by default; add
+                    --with-infra to include organize/backup/cleanup/monitor.
                     Use --force to restart units that are already active
                     (required when picking up config changes).
 
@@ -72,11 +74,11 @@ Common workflows
   # Redeploy only cameras with changed settings (e.g. IP updates):
   sudo python3 service_helper.py deploy --changed
 
-    # Preview what deploy would do without changing anything:
-    sudo python3 service_helper.py deploy --new --dry-run
+  # Scoped deploy with infrastructure units included:
+  sudo python3 service_helper.py deploy --changed --with-infra
 
-  # Push a config change and reload all running services:
-  python3 service_helper.py generate
+  # Preview what deploy would do without changing anything:
+  sudo python3 service_helper.py deploy --new --dry-run
   sudo python3 service_helper.py deploy --force
 
   # Push a config change for one camera only:
@@ -358,23 +360,28 @@ def generate_all() -> List[pathlib.Path]:
 # ---------------------------------------------------------------------------
 
 def filter_units_by_station(
-    local_paths: List[pathlib.Path], stations: List[str]
+    local_paths: List[pathlib.Path],
+    stations: List[str],
+    include_infra: bool = True,
 ) -> List[pathlib.Path]:
     """Filter unit paths to only those matching the given station names.
 
-    Non-camera units (aux timers, monitor) are always kept so that
-    infrastructure services are never accidentally excluded from an action.
+    Parameters
+    ----------
+    include_infra : bool
+        If True, non-camera units (aux timers/services + monitor) are kept.
+        If False, only matching record_camera_<STATION>.service units remain.
+
     If stations is empty, all units are returned unchanged.
     """
     if not stations:
         return local_paths
     keep = []
     for p in local_paths:
-        # always keep non-camera units (timers, aux services, monitor)
         if not p.name.startswith("record_camera_"):
-            keep.append(p)
+            if include_infra:
+                keep.append(p)
             continue
-        # record_camera_STATION.service → extract STATION
         station = p.stem.removeprefix("record_camera_")
         if station in stations:
             keep.append(p)
@@ -649,6 +656,7 @@ def deploy(
     only_new: bool = False,
     only_changed: bool = False,
     dry_run: bool = False,
+    with_infra: bool = False,
 ):
     """Full deployment pipeline: generate → link → daemon-reload → enable → start.
 
@@ -670,6 +678,10 @@ def deploy(
     dry_run : bool
         If True, print what would be generated/linked/enabled/started and
         exit without writing files or calling systemctl mutating commands.
+    with_infra : bool
+        When using a scoped selector (--station/--new/--changed), include
+        infrastructure units (organize/backup/cleanup/monitor) as targets.
+        By default, scoped deploys are camera-only.
 
     Examples
     --------
@@ -692,8 +704,11 @@ def deploy(
     # Redeploy only cameras with changed settings (e.g. IP updates):
       sudo python3 service_helper.py deploy --changed
 
-        # Preview changed-camera redeploy without applying it:
-            sudo python3 service_helper.py deploy --changed --dry-run
+    # Preview changed-camera redeploy without applying it:
+      sudo python3 service_helper.py deploy --changed --dry-run
+
+    # Scoped deploy including infrastructure units too:
+      sudo python3 service_helper.py deploy --changed --with-infra
     """
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
     all_units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
@@ -729,7 +744,9 @@ def deploy(
             sys.exit(1)
 
     all_paths = [p for p, _ in all_units]
-    target_paths = filter_units_by_station(all_paths, stations)
+    scoped = bool(stations) or only_new or only_changed
+    include_infra = with_infra or not scoped
+    target_paths = filter_units_by_station(all_paths, stations, include_infra=include_infra)
     unit_names = [p.name for p in target_paths if p.suffix in {".service", ".timer"}]
 
     if dry_run:
@@ -742,6 +759,7 @@ def deploy(
             selector = "changed"
 
         print(f"[DRY-RUN] selector={selector}")
+        print(f"[DRY-RUN] include_infra={include_infra}")
         print(f"[DRY-RUN] Would generate {len(all_units)} unit/timer file(s) in {LOCAL_SERVICE_DIR} and {LOCAL_TIMER_DIR}.")
         print(f"[DRY-RUN] Would link {len(target_paths)} unit/timer file(s) into {SYSTEMD_DIR} and run daemon-reload.")
         if unit_names:
@@ -779,7 +797,7 @@ def main():
     parser.add_argument(
         "--station", metavar="STATION", nargs="+", default=[],
         help="Limit action to these station names (e.g. --station ROST2 TRI6). "
-             "Non-camera units (timers, aux services, monitor) are always included.",
+             "For deploy, scoped actions are camera-only unless --with-infra is set.",
     )
     parser.add_argument(
         "--force", action="store_true",
@@ -797,10 +815,14 @@ def main():
         "--dry-run", action="store_true",
         help="With deploy: print what would be deployed without making changes.",
     )
+    parser.add_argument(
+        "--with-infra", action="store_true",
+        help="With deploy and a scoped selector, include organize/backup/cleanup/monitor units.",
+    )
     args = parser.parse_args()
 
-    if (args.new or args.changed or args.dry_run) and args.action != "deploy":
-        parser.error("--new, --changed, and --dry-run can only be used with the deploy action")
+    if (args.new or args.changed or args.dry_run or args.with_infra) and args.action != "deploy":
+        parser.error("--new, --changed, --dry-run, and --with-infra can only be used with the deploy action")
 
     if args.action == "generate":
         generate_all()
@@ -817,6 +839,7 @@ def main():
             only_new=args.new,
             only_changed=args.changed,
             dry_run=args.dry_run,
+            with_infra=args.with_infra,
         )
         return
 
