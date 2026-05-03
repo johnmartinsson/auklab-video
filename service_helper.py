@@ -72,6 +72,9 @@ Common workflows
   # Redeploy only cameras with changed settings (e.g. IP updates):
   sudo python3 service_helper.py deploy --changed
 
+    # Preview what deploy would do without changing anything:
+    sudo python3 service_helper.py deploy --new --dry-run
+
   # Push a config change and reload all running services:
   python3 service_helper.py generate
   sudo python3 service_helper.py deploy --force
@@ -645,6 +648,7 @@ def deploy(
     force: bool = False,
     only_new: bool = False,
     only_changed: bool = False,
+    dry_run: bool = False,
 ):
     """Full deployment pipeline: generate → link → daemon-reload → enable → start.
 
@@ -663,6 +667,9 @@ def deploy(
     only_changed : bool
         If True, auto-select stations where deployed camera unit content
         differs from current config-derived content.
+    dry_run : bool
+        If True, print what would be generated/linked/enabled/started and
+        exit without writing files or calling systemctl mutating commands.
 
     Examples
     --------
@@ -684,6 +691,9 @@ def deploy(
 
     # Redeploy only cameras with changed settings (e.g. IP updates):
       sudo python3 service_helper.py deploy --changed
+
+        # Preview changed-camera redeploy without applying it:
+            sudo python3 service_helper.py deploy --changed --dry-run
     """
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
     all_units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
@@ -718,15 +728,36 @@ def deploy(
             print(f"        Known: {', '.join(sorted(known))}", file=sys.stderr)
             sys.exit(1)
 
+    all_paths = [p for p, _ in all_units]
+    target_paths = filter_units_by_station(all_paths, stations)
+    unit_names = [p.name for p in target_paths if p.suffix in {".service", ".timer"}]
+
+    if dry_run:
+        selector = "all"
+        if stations:
+            selector = f"stations={','.join(stations)}"
+        elif only_new:
+            selector = "new"
+        elif only_changed:
+            selector = "changed"
+
+        print(f"[DRY-RUN] selector={selector}")
+        print(f"[DRY-RUN] Would generate {len(all_units)} unit/timer file(s) in {LOCAL_SERVICE_DIR} and {LOCAL_TIMER_DIR}.")
+        print(f"[DRY-RUN] Would link {len(target_paths)} unit/timer file(s) into {SYSTEMD_DIR} and run daemon-reload.")
+        if unit_names:
+            print(f"[DRY-RUN] Would enable: {', '.join(unit_names)}")
+            if force:
+                print(f"[DRY-RUN] Would restart: {', '.join(unit_names)}")
+            else:
+                print(f"[DRY-RUN] Would start (skipping already active): {', '.join(unit_names)}")
+        else:
+            print("[DRY-RUN] No target units selected.")
+        return
+
     for path, content in all_units:
         write_file(path, content)
 
-    all_paths = [p for p, _ in all_units]
-    target_paths = filter_units_by_station(all_paths, stations)
-
     symlink_units(target_paths)
-
-    unit_names = [p.name for p in target_paths if p.suffix in {".service", ".timer"}]
     subprocess.run(["systemctl", "enable", *unit_names], check=False)
 
     if force:
@@ -762,10 +793,14 @@ def main():
         "--changed", action="store_true",
         help="With deploy: target only cameras whose deployed unit differs from current config.",
     )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="With deploy: print what would be deployed without making changes.",
+    )
     args = parser.parse_args()
 
-    if (args.new or args.changed) and args.action != "deploy":
-        parser.error("--new and --changed can only be used with the deploy action")
+    if (args.new or args.changed or args.dry_run) and args.action != "deploy":
+        parser.error("--new, --changed, and --dry-run can only be used with the deploy action")
 
     if args.action == "generate":
         generate_all()
@@ -781,6 +816,7 @@ def main():
             force=args.force,
             only_new=args.new,
             only_changed=args.changed,
+            dry_run=args.dry_run,
         )
         return
 
