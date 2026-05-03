@@ -766,11 +766,13 @@ def deploy(
 
         print(f"[DRY-RUN] selector={selector}")
         print(f"[DRY-RUN] include_infra={include_infra}")
+        target_set = {p.resolve() for p in target_paths}
         changed_units = [
             (p, c) for p, c in all_units
-            if not p.exists() or p.read_text(encoding="utf-8") != c
+            if p.resolve() in target_set
+            and (not p.exists() or p.read_text(encoding="utf-8") != c)
         ]
-        print(f"[DRY-RUN] Would write {len(changed_units)} changed/new unit/timer file(s) (of {len(all_units)} total) in {LOCAL_SERVICE_DIR} and {LOCAL_TIMER_DIR}.")
+        print(f"[DRY-RUN] Would write {len(changed_units)} changed/new unit/timer file(s) (of {len(target_paths)} targeted) in {LOCAL_SERVICE_DIR} and {LOCAL_TIMER_DIR}.")
         print(f"[DRY-RUN] Would link {len(target_paths)} unit/timer file(s) into {SYSTEMD_DIR} and run daemon-reload.")
         if unit_names:
             print(f"[DRY-RUN] Would enable: {', '.join(unit_names)}")
@@ -782,7 +784,10 @@ def deploy(
             print("[DRY-RUN] No target units selected.")
         return
 
+    target_set = {p.resolve() for p in target_paths}
     for path, content in all_units:
+        if path.resolve() not in target_set:
+            continue
         try:
             existing = path.read_text(encoding="utf-8")
         except FileNotFoundError:
