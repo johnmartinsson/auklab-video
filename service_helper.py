@@ -13,10 +13,11 @@ Unit types managed
   record_camera_<STATION>.service   One per camera in cameras.json.
                                     Runs record_camera.py forever under
                                     systemd with Restart=always.
-  organize_video.{service,timer}    Moves finished segments into date
-                                    folders every segment_time seconds.
-  backup_video.{service,timer}      Rsyncs ready segments to the NAS.
-  cleanup_video.{service,timer}     Deletes local segments already on NAS.
+  pipeline_video.{service,timer}    Runs organize → backup → cleanup
+                                    sequentially as a single oneshot every
+                                    segment_time seconds.  Replaces the
+                                    former three independent timer/service
+                                    pairs.
   monitor_recordings.{service,timer} Watchdog: restarts stalled recorders,
                                     sends camera-down/recovered emails, and
                                     a daily 8AM summary of down cameras.
@@ -153,12 +154,11 @@ ExecStart=/usr/bin/python3 {script_path} \
 WantedBy=multi-user.target
 """
 
-# Shared template for the three one-shot auxiliary jobs:
-#   organize_video  – move segments into date folders
-#   backup_video    – rsync to NAS
-#   cleanup_video   – delete locally once confirmed on NAS
-GENERIC_UNIT_TEMPLATE = """[Unit]
-Description={description}
+# Pipeline service: runs organize → backup → cleanup in strict sequence.
+# systemd Type=oneshot with multiple ExecStart lines executes them in order;
+# each step only starts after the previous one exits 0.
+PIPELINE_UNIT_TEMPLATE = """[Unit]
+Description=Run organize → backup → cleanup pipeline sequentially
 After=network-online.target
 Wants=network-online.target
 
@@ -166,21 +166,21 @@ Wants=network-online.target
 Type=oneshot
 User=bsp
 Group=bsp
-ExecStart=/usr/bin/python3 {exec_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
+ExecStart=/usr/bin/python3 {organize_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
+ExecStart=/usr/bin/python3 {backup_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
+ExecStart=/usr/bin/python3 {cleanup_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
 
 [Install]
 WantedBy=multi-user.target
 """
 
-# Generic timer template used for all three auxiliary jobs.
-# OnBootSec is staggered (2/4/6 min) so organize runs before backup
-# runs before cleanup, avoiding disk contention on boot.
-TIMER_TEMPLATE = """[Unit]
-Description=Run {unit_name} every {interval}s
+PIPELINE_TIMER_TEMPLATE = """[Unit]
+Description=Run video pipeline (organize → backup → cleanup) every {interval}s
 
 [Timer]
-OnBootSec={on_boot}
+OnBootSec=2min
 OnUnitActiveSec={interval}
+Persistent=true
 
 [Install]
 WantedBy=timers.target
@@ -279,44 +279,31 @@ def create_camera_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
 
 
 def create_aux_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
-    """Return (path, content) for organize/backup/cleanup services and timers.
+    """Return (path, content) for the pipeline_video service and timer.
 
-    Timer intervals match segment_time so the pipeline runs at the same
-    cadence as the recording segments.  Timers are staggered 2 min apart
-    to sequence the pipeline: organize → backup → cleanup.
+    A single oneshot service runs organize → backup → cleanup in strict
+    sequence, driven by one timer.  This eliminates the scheduling races
+    that arose from three independent timers.
     """
     defaults = config["defaults"]
-    seg = defaults["segment_time"]
-    interval = seg
+    interval = defaults["segment_time"]
 
-    jobs = [
-        ("organize_video", "Organize finished camera segments"),
-        ("backup_video", "Rsync camera archive to NAS"),
-        ("cleanup_video", "Remove local files already synced to NAS"),
+    service_path = LOCAL_SERVICE_DIR / "pipeline_video.service"
+    timer_path   = LOCAL_TIMER_DIR   / "pipeline_video.timer"
+
+    service_content = PIPELINE_UNIT_TEMPLATE.format(
+        organize_path=str((REPO_DIR / "organize_video.py").resolve()),
+        backup_path=str((REPO_DIR / "backup_video.py").resolve()),
+        cleanup_path=str((REPO_DIR / "cleanup_video.py").resolve()),
+        backup_config_path=str(BACKUP_CONFIG_PATH.resolve()),
+        cameras_config_path=str(CAMERAS_CONFIG_PATH.resolve()),
+    )
+    timer_content = PIPELINE_TIMER_TEMPLATE.format(interval=interval)
+
+    return [
+        (service_path, service_content),
+        (timer_path, timer_content),
     ]
-    units = []
-    for idx, (name, desc) in enumerate(jobs, start=1):
-        service_path = LOCAL_SERVICE_DIR / f"{name}.service"
-        timer_path   = LOCAL_TIMER_DIR   / f"{name}.timer"
-        exec_path    = str((REPO_DIR / f"{name}.py").resolve())
-
-        service_content = GENERIC_UNIT_TEMPLATE.format(
-            description=desc,
-            user=defaults["user"],
-            exec_path=exec_path,
-            backup_config_path=str(BACKUP_CONFIG_PATH.resolve()),
-            cameras_config_path=str(CAMERAS_CONFIG_PATH.resolve()),
-        )
-        timer_content = TIMER_TEMPLATE.format(
-            unit_name=f"{name}.service",
-            interval=interval,
-            on_boot=f"{idx*2}min"  # spread them 2 min apart (2,4,6 …)
-        )
-        units.extend([
-            (service_path, service_content),
-            (timer_path, timer_content),
-        ])
-    return units
 
 def create_monitor_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
     """Return (path, content) for the monitor service and its 5-min timer."""
@@ -342,11 +329,27 @@ def create_monitor_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
     return units
 
 
+# Old unit names superseded by pipeline_video.{service,timer}.
+_LEGACY_AUX_UNITS = [
+    LOCAL_SERVICE_DIR / "organize_video.service",
+    LOCAL_TIMER_DIR   / "organize_video.timer",
+    LOCAL_SERVICE_DIR / "backup_video.service",
+    LOCAL_TIMER_DIR   / "backup_video.timer",
+    LOCAL_SERVICE_DIR / "cleanup_video.service",
+    LOCAL_TIMER_DIR   / "cleanup_video.timer",
+]
+
+
 def generate_all() -> List[pathlib.Path]:
     """Write all unit/timer files to ./services and ./timers and return their paths.
 
     Safe to run without sudo.  Idempotent – re-running overwrites files
     in place with the latest content derived from cameras.json.
+
+    Also removes legacy organize/backup/cleanup unit files from the repo
+    dirs (the three that were replaced by pipeline_video.{service,timer}).
+    Symlinks in /etc/systemd/system must be removed manually before
+    running 'sudo systemctl daemon-reload'.
     """
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
 
@@ -359,6 +362,13 @@ def generate_all() -> List[pathlib.Path]:
         if existing == content:
             continue
         write_file(path, content)
+
+    # Remove legacy unit files that are no longer generated.
+    for legacy in _LEGACY_AUX_UNITS:
+        if legacy.exists():
+            legacy.unlink()
+            print(f"[GENERATE] removed legacy unit {legacy.relative_to(REPO_DIR)}")
+
     return [p for p, _ in units]
 
 # ---------------------------------------------------------------------------
@@ -442,11 +452,9 @@ def systemctl_cmd(cmd: str, local_paths: List[pathlib.Path]):
     if not unit_names:
         return
 
-    # Fixed pipeline order: organize must finish before backup; backup before cleanup.
+    # Single pipeline timer replaces the three former independent timers.
     aux_timer_order = [
-        "organize_video.timer",
-        "backup_video.timer",
-        "cleanup_video.timer",
+        "pipeline_video.timer",
     ]
 
     if cmd == "start":
