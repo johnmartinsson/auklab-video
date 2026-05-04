@@ -70,7 +70,9 @@ def main():
 
     # Build filename pattern with station prefix
     fname_pattern = str(out_dir / (f"{args.station}_%Y%m%dT%H%M%S.mkv"))
-    segment_list = str(out_dir / f"{args.station}_manifest.csv")
+    # Add sub-second precision and PID so rapid restart loops never reuse a manifest name.
+    session_stamp = _dt.datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+    segment_list = str(out_dir / f"{args.station}_{session_stamp}_{os.getpid()}_manifest.csv")
 
     rtsp_url = f"rtsp://{args.user}:{args.password}@{args.ip}:{args.rtsp_port}/Streaming/Channels/101"
 

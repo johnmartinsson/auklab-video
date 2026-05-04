@@ -64,13 +64,13 @@ def main():
                 skipped_missing += 1
                 continue
 
-        # Keep one manifest per station at the station level (not per date).
-        # Overwrite on every organize run so the NAS copy stays current.
-        manifest_src = station_dir / f"{station}_manifest.csv"
-        if manifest_src.exists():
-            station_ready = ready / station
+        # Keep all manifests per station at the station level (not per date).
+        # Manifests are now session-scoped so recorder restarts do not overwrite history.
+        station_ready = ready / station
+        manifest_sources = sorted(station_dir.glob("*_manifest.csv"))
+        for manifest_src in manifest_sources:
             station_ready.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(manifest_src, station_ready / f"{station}_manifest.csv")
+            shutil.copy2(manifest_src, station_ready / manifest_src.name)
     print(f"[organize] moved {moved} video file(s), skipped_missing={skipped_missing} → {ready}")
     sys.exit(0)
 
