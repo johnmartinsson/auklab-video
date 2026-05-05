@@ -4,34 +4,81 @@
     "password": "password",
     "segment_time": 600,
     "loglevel": "error",
-    "output_dir": "/home/bsp/auklab-video/recording_directory",
+    "output_dir": "/mnt/ramdisk",
     "logs_dir":   "/home/bsp/auklab-video/logs" ,
     "rtsp_port": 554,
+    "rtsp_path": "/Streaming/Channels/101",
+    "audio_optional": true,
+    "copy_timestamps": true,
+    "segment_format": "mkv",
     "ffmpeg_path": "/usr/bin/ffmpeg",
-    "ffprobe_path": "/usr/bin/ffprobe",
-    "expected_audio": {
-      "codec_name": "aac",
-      "sample_rate": 16000,
-      "channels_text": "mono"
+    "ffprobe_path": "/usr/bin/ffprobe"
+  },
+  "camera_profiles": {
+    "hik_wide_audio": {
+      "rtsp_path": "/Streaming/Channels/101",
+      "audio_optional": true,
+      "copy_timestamps": true,
+      "expected_audio": {
+        "required": true,
+        "codec_name": "aac",
+        "sample_rate": 16000,
+        "channels_text": "mono"
+      },
+      "expected_video": {
+        "codec_name": "hevc",
+        "profile": "Main",
+        "width": 2688,
+        "height": 1520,
+        "r_frame_rate": "25/1"
+      }
     },
-    "expected_video": {
-      "codec_name": "hevc",
-      "profile": "Main",
-      "width": 2688,
-      "height": 1520,
-      "r_frame_rate": "25/1"
+    "hik_superwide_audio": {
+      "rtsp_path": "/Streaming/Channels/101",
+      "audio_optional": true,
+      "copy_timestamps": true,
+      "expected_audio": {
+        "required": true,
+        "codec_name": "aac",
+        "sample_rate": 16000,
+        "channels_text": "mono"
+      },
+      "expected_video": {
+        "codec_name": "hevc",
+        "profile": "Main",
+        "width": 3040,
+        "height": 1368,
+        "r_frame_rate": "25/1"
+      }
+    },
+    "provision_overview": {
+      "rtsp_path": "/profile1",
+      "audio_optional": true,
+      "copy_timestamps": false,
+      "expected_audio": {
+        "required": false
+      },
+      "expected_video": {
+        "codec_name": "hevc",
+        "profile": "Main",
+        "width": 2560,
+        "height": 1440,
+        "r_frame_rate": "25/1"
+      }
     }
   },
   "cameras": [
-    { "ip": "192.168.1.100", "station": "ROST6" },
-    { "ip": "192.168.1.164", "station": "TRI2L" },
-    { "ip": "192.168.1.173", "station": "FAR1L" },
-    { "ip": "192.168.1.174", "station": "BONDEN6" },
-    { "ip": "192.168.1.68",  "station": "FAR6" },
-    { "ip": "192.168.1.72",  "station": "TRI6" },
-    { "ip": "192.168.1.74",  "station": "FAR1R" },
-    { "ip": "192.168.1.76",  "station": "ROST2" },
-    { "ip": "192.168.1.81",  "station": "FAR3" },
-    { "ip": "192.168.1.95",  "station": "TRI3" }
+    { "ip": "192.168.1.71",  "station": "FAR3", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.95",  "station": "TRI3", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.100",  "station": "ROST6", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.68",  "station": "FAR6", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.74",  "station": "FAR1R", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.164",  "station": "BOND6", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.173",  "station": "FAR1L", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.184",  "station": "TRI2L", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.72",  "station": "TRI6", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.77",  "station": "ROST2", "profile": "hik_wide_audio" },
+    { "ip": "192.168.1.200", "station": "TRI1L", "profile": "hik_superwide_audio" },
+    { "ip": "192.168.1.160", "station": "OVERVIEW", "profile": "provision_overview" }
   ]
 }

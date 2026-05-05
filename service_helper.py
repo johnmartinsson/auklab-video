@@ -107,7 +107,7 @@ import os
 import pathlib
 import subprocess
 import sys
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 from itertools import cycle
 import time
 
@@ -148,7 +148,9 @@ ExecStart=/usr/bin/python3 {script_path} \
           --segment_time {segment_time} --loglevel {loglevel} \
           --segment_format {segment_format} \
           --output_dir {output_dir} --logs_dir {logs_dir} \
-          --rtsp_port {rtsp_port} --core {core}
+          --rtsp_port {rtsp_port} --rtsp_path {rtsp_path} \
+          --audio_optional {audio_optional} --copy_timestamps {copy_timestamps} \
+          --core {core}
 
 [Install]
 WantedBy=multi-user.target
@@ -230,6 +232,36 @@ def load_json(path: pathlib.Path):
         return json.load(fh)
 
 
+def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge dictionaries; values in override take precedence."""
+    merged: Dict[str, Any] = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def resolve_camera_config(config: dict, cam: dict) -> Dict[str, Any]:
+    """Build effective per-camera config as defaults -> profile -> camera."""
+    defaults = config.get("defaults", {})
+    profile_name = cam.get("profile")
+    profile_cfg: Dict[str, Any] = {}
+
+    if profile_name:
+        profiles = config.get("camera_profiles", {})
+        if profile_name not in profiles:
+            print(
+                f"[ERROR] Camera '{cam.get('station', '<unknown>')}' references unknown profile '{profile_name}'",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        profile_cfg = profiles[profile_name]
+
+    return deep_merge(deep_merge(defaults, profile_cfg), cam)
+
+
 def ensure_dir(path: pathlib.Path):
     path.mkdir(parents=True, exist_ok=True)
 
@@ -254,22 +286,24 @@ def create_camera_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
     cores = list(range(_mp.cpu_count()))
     core_cycle = cycle(cores)
     script_path = str((REPO_DIR / "record_camera.py").resolve())
-    defaults = config["defaults"]
-
     units = []
     for cam in config["cameras"]:
+        eff = resolve_camera_config(config, cam)
         core = next(core_cycle)
         content = CAMERA_UNIT_TEMPLATE.format(
-            station=cam["station"],
-            ip=cam["ip"],
-            user=defaults["user"],
-            password=defaults["password"],
-            segment_time=defaults["segment_time"],
-            loglevel=defaults["loglevel"],
-            segment_format=defaults.get("segment_format", "mkv"),
-            output_dir=defaults["output_dir"],
-            logs_dir=defaults["logs_dir"],
-            rtsp_port=defaults["rtsp_port"],
+            station=eff["station"],
+            ip=eff["ip"],
+            user=eff["user"],
+            password=eff["password"],
+            segment_time=eff["segment_time"],
+            loglevel=eff["loglevel"],
+            segment_format=eff.get("segment_format", "mkv"),
+            output_dir=eff["output_dir"],
+            logs_dir=eff["logs_dir"],
+            rtsp_port=eff.get("rtsp_port", 554),
+            rtsp_path=eff.get("rtsp_path", "/Streaming/Channels/101"),
+            audio_optional=str(bool(eff.get("audio_optional", True))).lower(),
+            copy_timestamps=str(bool(eff.get("copy_timestamps", True))).lower(),
             script_path=script_path,
             core=core,
         )

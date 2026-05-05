@@ -11,11 +11,19 @@ arguments are filled in automatically.
 """
 import argparse
 import datetime as _dt
-import json
 import os
 import pathlib
-import subprocess
 import sys
+
+
+def parse_bool(value: str) -> bool:
+    """Parse common true/false string forms for CLI flags."""
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
 
 
 def parse_args():
@@ -29,7 +37,13 @@ def parse_args():
     p.add_argument("--loglevel", default="info")
     p.add_argument("--output_dir", default="/home/recordingpi/cameras")
     p.add_argument("--rtsp_port", type=int, default=554)
+    p.add_argument("--rtsp_path", default="/Streaming/Channels/101",
+                   help="RTSP path suffix, e.g. /Streaming/Channels/101 or /profile1")
     p.add_argument("--ffmpeg_path", default="ffmpeg")
+    p.add_argument("--audio_optional", type=parse_bool, default=True,
+                   help="If true, map audio optionally with 0:a:0? so no-audio cameras still record")
+    p.add_argument("--copy_timestamps", type=parse_bool, default=True,
+                   help="If true, include -copyts/-copytb for legacy timestamp behavior")
     p.add_argument("--core", type=int, default=None,
                    help="Bind this process to a given CPU core (optional)")
     p.add_argument("--logs_dir",   default=None,  # use cwd if None
@@ -74,7 +88,7 @@ def main():
     session_stamp = _dt.datetime.now().strftime("%Y%m%dT%H%M%S_%f")
     segment_list = str(out_dir / f"{args.station}_{session_stamp}_{os.getpid()}_manifest.csv")
 
-    rtsp_url = f"rtsp://{args.user}:{args.password}@{args.ip}:{args.rtsp_port}/Streaming/Channels/101"
+    rtsp_url = f"rtsp://{args.user}:{args.password}@{args.ip}:{args.rtsp_port}{args.rtsp_path}"
 
     ffmpeg_cmd = [
         args.ffmpeg_path,
@@ -99,12 +113,20 @@ def main():
         "-use_wallclock_as_timestamps", "1",
         "-max_delay", "100000",
         "-i", rtsp_url,
-        "-map", "0:v", "-map", "0:a",
-        "-c:v", "copy", "-c:a", "copy",
-        "-copyts",
-        "-copytb", "1",
-        "-avoid_negative_ts", "disabled",
+        "-map", "0:v",
+    ]
 
+    if args.audio_optional:
+        ffmpeg_cmd.extend(["-map", "0:a:0?"])
+    else:
+        ffmpeg_cmd.extend(["-map", "0:a"])
+
+    ffmpeg_cmd.extend(["-c:v", "copy", "-c:a", "copy"])
+    if args.copy_timestamps:
+        ffmpeg_cmd.extend(["-copyts", "-copytb", "1"])
+    ffmpeg_cmd.extend(["-avoid_negative_ts", "disabled"])
+
+    ffmpeg_cmd.extend([
         # ───────── segmentation ─────────
         "-f", "segment", "-reset_timestamps", "1",
         "-segment_time", str(args.segment_time),
@@ -115,7 +137,7 @@ def main():
         "-segment_format", args.segment_format,
         "-strftime", "1",
         fname_pattern,
-    ]
+    ])
 
     print("[INFO] Launching FFmpeg:", " ".join(ffmpeg_cmd))
     os.execvp(ffmpeg_cmd[0], ffmpeg_cmd)  # Replace our process with ffmpeg
