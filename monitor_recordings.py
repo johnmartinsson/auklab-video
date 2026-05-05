@@ -81,7 +81,7 @@ def save_state(state_path: pathlib.Path, state: dict) -> None:
 
 def restart_service(unit: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["/usr/bin/systemctl", "restart", unit],
+        ["/usr/bin/sudo", "/usr/bin/systemctl", "restart", unit],
         check=False,
         capture_output=True,
         text=True,
