@@ -3,6 +3,34 @@ import json
 import subprocess
 import argparse
 
+
+def deep_merge(base, override):
+    """Recursively merge dictionaries; override wins."""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def resolve_camera_config(config_data, cam_config):
+    """Build effective per-camera config as defaults -> profile -> camera."""
+    defaults = config_data.get("defaults", {})
+    profile_name = cam_config.get("profile")
+    profile_cfg = {}
+
+    if profile_name:
+        profiles = config_data.get("camera_profiles", {})
+        profile_cfg = profiles.get(profile_name)
+        if profile_cfg is None:
+            raise ValueError(
+                f"Camera '{cam_config.get('station', 'UnknownStation')}' references unknown profile '{profile_name}'"
+            )
+
+    return deep_merge(deep_merge(defaults, profile_cfg), cam_config)
+
 def get_rtsp_stream_info(rtsp_url, ffprobe_path="ffprobe", timeout=15):
     """
     Probes an RTSP stream and returns audio and video stream information.
@@ -95,7 +123,8 @@ def compare_and_print(stream_type, actual_info, expected_info, station_ip_str):
         fields_to_check = {"codec_name": "Codec", "sample_rate": "Rate", "channels_text": "Channels"}
         # Normalize actual channels info
         actual_channels_text = actual_info.get('channel_layout', str(actual_info.get('channels', '')))
-        if actual_channels_text == '1': actual_channels_text = 'mono'
+        if actual_channels_text == '1':
+            actual_channels_text = 'mono'
 
         actual_vals_map = {
             "codec_name": actual_info.get('codec_name'),
@@ -150,7 +179,6 @@ def main():
         print(f"Error: Could not decode JSON from '{args.config}'.")
         return
 
-    defaults = config_data.get("defaults", {})
     cameras = config_data.get("cameras", [])
 
     if not cameras:
@@ -162,30 +190,33 @@ def main():
     overall_ok = True
 
     for cam_config in cameras:
-        station = cam_config.get("station", "UnknownStation")
-        ip = cam_config.get("ip")
+        try:
+            effective = resolve_camera_config(config_data, cam_config)
+        except ValueError as exc:
+            print(f"[ERROR] {exc}")
+            overall_ok = False
+            print("-" * 40)
+            continue
+
+        station = effective.get("station", "UnknownStation")
+        ip = effective.get("ip")
         
         if not ip:
             print(f"[WARN] Skipping camera entry for '{station}' due to missing IP.")
             continue
 
-        # Merge defaults with camera-specific settings
-        user = cam_config.get("user", defaults.get("user", "admin"))
+        user = effective.get("user", "admin")
         # IMPORTANT: Replace "YOUR_DEFAULT_PASSWORD" or ensure password is in config
-        password = cam_config.get("password", defaults.get("password", "YOUR_DEFAULT_PASSWORD")) 
-        rtsp_port = cam_config.get("rtsp_port", defaults.get("rtsp_port", 554))
-        ffprobe_path = cam_config.get("ffprobe_path", defaults.get("ffprobe_path", "ffprobe"))
+        password = effective.get("password", "YOUR_DEFAULT_PASSWORD")
+        rtsp_port = effective.get("rtsp_port", 554)
+        rtsp_path = effective.get("rtsp_path", "/Streaming/Channels/101")
+        ffprobe_path = effective.get("ffprobe_path", "ffprobe")
 
-        # Determine expected settings
-        default_expected_audio = defaults.get("expected_audio", {})
-        camera_expected_audio_override = cam_config.get("expected_audio", {})
-        expected_audio = {**default_expected_audio, **camera_expected_audio_override}
+        expected_audio = dict(effective.get("expected_audio", {}))
+        expected_video = dict(effective.get("expected_video", {}))
+        audio_required = expected_audio.pop("required", True)
 
-        default_expected_video = defaults.get("expected_video", {})
-        camera_expected_video_override = cam_config.get("expected_video", {})
-        expected_video = {**default_expected_video, **camera_expected_video_override}
-
-        rtsp_url = f"rtsp://{user}:{password}@{ip}:{rtsp_port}/Streaming/Channels/101" # Main stream
+        rtsp_url = f"rtsp://{user}:{password}@{ip}:{rtsp_port}{rtsp_path}" # Main stream
 
         station_ip_str = f"[{station} ({ip})]"
         print(station_ip_str)
@@ -204,16 +235,30 @@ def main():
             if not video_ok:
                 overall_ok = False
         elif actual_video_info: # Has video but not expected
-             print(f"  Video: Found but not defined in expected_video.")
+            print("  Video: Found but not defined in expected_video.")
 
 
         # Check Audio
-        if expected_audio: # Only check if there's an expectation
-            audio_ok = compare_and_print("audio", actual_audio_info, expected_audio, station_ip_str)
-            if not audio_ok:
+        if audio_required:
+            if expected_audio:
+                audio_ok = compare_and_print("audio", actual_audio_info, expected_audio, station_ip_str)
+                if not audio_ok:
+                    overall_ok = False
+            elif not actual_audio_info:
+                print("  Audio: required but not found.")
                 overall_ok = False
-        elif actual_audio_info: # Has audio but not expected
-            print(f"  Audio: Found but not defined in expected_audio.")
+            else:
+                print("  Audio: required and present (no detailed expected_audio fields set).")
+        else:
+            if actual_audio_info:
+                if expected_audio:
+                    audio_ok = compare_and_print("audio", actual_audio_info, expected_audio, station_ip_str)
+                    if not audio_ok:
+                        print("  Audio: present but does not match optional expected_audio fields (warning).")
+                else:
+                    print("  Audio: present (optional), no strict expectation.")
+            else:
+                print("  Audio: not present (optional) -> OK")
             
         print("-" * 40)
 
