@@ -61,35 +61,33 @@ Actions
 
 Common workflows
 ----------------
-  # Initial setup on a fresh machine:
-  python3 service_helper.py generate
-  sudo python3 service_helper.py deploy
+    # Safety rule: preview first, then apply.
+    sudo python3 service_helper.py deploy --new --dry-run
+    sudo python3 service_helper.py prune --dry-run
 
-  # Add two new cameras (edit cameras.json first):
-  python3 service_helper.py generate
-  sudo python3 service_helper.py deploy --station NEWCAM1 NEWCAM2
+    # Initial setup on a fresh machine:
+    python3 service_helper.py generate
+    sudo python3 service_helper.py deploy
 
-  # Deploy only cameras newly added to cameras.json:
-  sudo python3 service_helper.py deploy --new
+    # Add new cameras (set "active": true in cameras.json), then deploy only new:
+    sudo python3 service_helper.py deploy --new --dry-run
+    sudo python3 service_helper.py deploy --new
 
-  # Redeploy only cameras with changed settings (e.g. IP updates):
-  sudo python3 service_helper.py deploy --changed
+    # Activate one camera (set "active": true), then deploy only that station:
+    sudo python3 service_helper.py deploy --station ROST2 --dry-run
+    sudo python3 service_helper.py deploy --station ROST2
 
-  # Scoped deploy with infrastructure units included:
-  sudo python3 service_helper.py deploy --changed --with-infra
+    # Deactivate one camera (set "active": false), then prune that station:
+    # prune will prompt before deleting output_dir/ROST2.
+    sudo python3 service_helper.py prune --station ROST2 --dry-run
+    sudo python3 service_helper.py prune --station ROST2
 
-  # Preview what deploy would do without changing anything:
-  sudo python3 service_helper.py deploy --new --dry-run
-  sudo python3 service_helper.py deploy --force
+    # Remove a camera entirely from cameras.json, then prune stale units:
+    sudo python3 service_helper.py prune --dry-run
+    sudo python3 service_helper.py prune
 
-  # Push a config change for one camera only:
-  sudo python3 service_helper.py deploy --force --station ROST2
-
-  # Remove a camera from cameras.json then clean up:
-  sudo python3 service_helper.py prune
-
-  # Check fleet health:
-  sudo python3 service_helper.py status
+    # Check fleet health:
+    sudo python3 service_helper.py status
 
 Privilege requirements
 ----------------------
