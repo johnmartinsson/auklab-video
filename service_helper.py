@@ -105,6 +105,7 @@ import json
 import multiprocessing as _mp
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 from typing import Any, Dict, List, Tuple
@@ -262,6 +263,11 @@ def resolve_camera_config(config: dict, cam: dict) -> Dict[str, Any]:
     return deep_merge(deep_merge(defaults, profile_cfg), cam)
 
 
+def camera_is_active(cam: dict) -> bool:
+    """Return whether a camera is active. Missing flag defaults to True."""
+    return bool(cam.get("active", True))
+
+
 def ensure_dir(path: pathlib.Path):
     path.mkdir(parents=True, exist_ok=True)
 
@@ -288,6 +294,8 @@ def create_camera_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
     script_path = str((REPO_DIR / "record_camera.py").resolve())
     units = []
     for cam in config["cameras"]:
+        if not camera_is_active(cam):
+            continue
         eff = resolve_camera_config(config, cam)
         core = next(core_cycle)
         content = CAMERA_UNIT_TEMPLATE.format(
@@ -599,54 +607,122 @@ def print_status_summary(local_paths: List[pathlib.Path]):
 # ---------------------------------------------------------------------------
 
 def prune(stations: List[str], dry_run: bool = False):
-    """Remove units for cameras that no longer exist in cameras.json.
+    """Remove units for cameras that are removed or marked inactive.
 
     For each stale record_camera_<STATION>.service found in ./services:
+            0. Temporarily stop monitor_recordings service/timer
       1. systemctl stop
       2. systemctl disable
       3. Remove /etc/systemd/system symlink
       4. Delete the local service file
       5. daemon-reload
+      6. Optionally remove recording directory under output_dir/STATION
+            7. Restart monitor_recordings service/timer
 
-    Run with sudo after removing a camera from cameras.json.
-    The stations argument is accepted but currently unused – prune always
-    operates on all stale units (the diff between disk and config).
+    Run with sudo after removing a camera from cameras.json or setting
+    "active": false for a camera.
     """
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
     known_stations = {c["station"] for c in cam_cfg["cameras"]}
+    active_stations = {c["station"] for c in cam_cfg["cameras"] if camera_is_active(c)}
+    camera_by_station = {c["station"]: c for c in cam_cfg["cameras"]}
+    default_output_dir = pathlib.Path(cam_cfg.get("defaults", {}).get("output_dir", "/mnt/ramdisk"))
+
+    def recording_dir_for_station(station: str) -> pathlib.Path:
+        cam = camera_by_station.get(station)
+        if cam is None:
+            return default_output_dir / station
+        eff = resolve_camera_config(cam_cfg, cam)
+        return pathlib.Path(eff.get("output_dir", str(default_output_dir))) / station
+
+    def confirm_delete_recording_dir(station: str, recording_dir: pathlib.Path) -> bool:
+        prompt = (
+            f"[PRUNE] Remove {recording_dir}? "
+            f"All recordings in memory for {station} will be lost. [y/N]: "
+        )
+        while True:
+            try:
+                answer = input(prompt).strip().lower()
+            except EOFError:
+                print(f"[PRUNE] No input available; keeping {recording_dir}")
+                return False
+            if answer in {"y", "yes"}:
+                return True
+            if answer in {"", "n", "no"}:
+                return False
+            print("[PRUNE] Please answer y or n.")
 
     stale = []
     for path in LOCAL_SERVICE_DIR.glob("record_camera_*.service"):
         station = path.stem.removeprefix("record_camera_")
-        if station not in known_stations:
+        if station not in active_stations:
             stale.append((station, path))
 
+    if stations:
+        requested = set(stations)
+        stale = [(station, path) for station, path in stale if station in requested]
+
     if not stale:
-        print("[PRUNE] Nothing to prune – all units match cameras.json")
+        print("[PRUNE] Nothing to prune – all active cameras are deployed")
         return
 
     if dry_run:
+        print("[DRY-RUN] Would stop monitor_recordings.timer and monitor_recordings.service before prune.")
         for station, path in sorted(stale):
-            print(f"[DRY-RUN] Would prune: {path.name} (stop, disable, unlink, delete)")
+            if station in known_stations:
+                reason = "inactive"
+            else:
+                reason = "removed"
+            rec_dir = recording_dir_for_station(station)
+            print(
+                f"[DRY-RUN] Would prune: {path.name} reason={reason} "
+                f"(stop, disable, unlink, delete) and prompt y/N to remove {rec_dir}"
+            )
+        print("[DRY-RUN] Would restore monitor_recordings.service/timer to their pre-prune active states.")
         return
 
-    for station, path in sorted(stale):
-        unit = path.name
-        print(f"[PRUNE] Stale unit: {unit}")
-        subprocess.run(["systemctl", "stop", unit], check=False)
-        subprocess.run(["systemctl", "disable", unit], check=False)
-        symlink = SYSTEMD_DIR / unit
-        if symlink.exists() or symlink.is_symlink():
-            try:
-                symlink.unlink()
-                print(f"[PRUNE] Removed symlink {symlink}")
-            except PermissionError:
-                print(f"[WARN] Could not remove {symlink} – need sudo", file=sys.stderr)
-        path.unlink(missing_ok=True)
-        print(f"[PRUNE] Deleted {path.relative_to(REPO_DIR)}")
+    monitor_timer_was_active = is_unit_active("monitor_recordings.timer")
+    monitor_service_was_active = is_unit_active("monitor_recordings.service")
+    print("[PRUNE] Stopping monitor_recordings.service and monitor_recordings.timer temporarily")
+    subprocess.run(["systemctl", "stop", "monitor_recordings.timer"], check=False)
+    subprocess.run(["systemctl", "stop", "monitor_recordings.service"], check=False)
 
-    subprocess.run(["systemctl", "daemon-reload"], check=False)
-    print(f"[PRUNE] Done – removed {len(stale)} stale unit(s)")
+    try:
+        for station, path in sorted(stale):
+            unit = path.name
+            reason = "inactive" if station in known_stations else "removed"
+            print(f"[PRUNE] Stale unit: {unit} reason={reason}")
+            subprocess.run(["systemctl", "stop", unit], check=False)
+            subprocess.run(["systemctl", "disable", unit], check=False)
+            symlink = SYSTEMD_DIR / unit
+            if symlink.exists() or symlink.is_symlink():
+                try:
+                    symlink.unlink()
+                    print(f"[PRUNE] Removed symlink {symlink}")
+                except PermissionError:
+                    print(f"[WARN] Could not remove {symlink} – need sudo", file=sys.stderr)
+            path.unlink(missing_ok=True)
+            print(f"[PRUNE] Deleted {path.relative_to(REPO_DIR)}")
+
+            rec_dir = recording_dir_for_station(station)
+            if rec_dir.exists() and rec_dir.is_dir():
+                if confirm_delete_recording_dir(station, rec_dir):
+                    try:
+                        shutil.rmtree(rec_dir)
+                        print(f"[PRUNE] Removed recording directory {rec_dir}")
+                    except OSError as exc:
+                        print(f"[WARN] Failed to remove {rec_dir}: {exc}", file=sys.stderr)
+                else:
+                    print(f"[PRUNE] Kept recording directory {rec_dir}")
+
+        subprocess.run(["systemctl", "daemon-reload"], check=False)
+        print(f"[PRUNE] Done – removed {len(stale)} stale unit(s)")
+    finally:
+        print("[PRUNE] Restoring monitor_recordings.service and monitor_recordings.timer state")
+        if monitor_service_was_active:
+            subprocess.run(["systemctl", "start", "monitor_recordings.service"], check=False)
+        if monitor_timer_was_active:
+            subprocess.run(["systemctl", "start", "monitor_recordings.timer"], check=False)
 
 
 def is_station_linked(station: str) -> bool:
@@ -662,8 +738,8 @@ def is_station_linked(station: str) -> bool:
 
 
 def compute_new_stations(cam_cfg: dict) -> List[str]:
-    """Return stations present in cameras.json but not linked/deployed yet."""
-    stations = [cam["station"] for cam in cam_cfg["cameras"]]
+    """Return active stations present in cameras.json but not linked/deployed yet."""
+    stations = [cam["station"] for cam in cam_cfg["cameras"] if camera_is_active(cam)]
     return sorted([s for s in stations if not is_station_linked(s)])
 
 
