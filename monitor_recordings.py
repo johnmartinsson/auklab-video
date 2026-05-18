@@ -26,7 +26,7 @@ from email.message import EmailMessage
 LOGGER = logging.getLogger("monitor_recordings")
 
 # --- Constants ---
-DISK_USAGE_THRESHOLD = 85
+DISK_USAGE_THRESHOLD = 45
 DISK_WARNING_FLAG = "/tmp/.disk_warning_sent"
 DEFAULT_LOG_FILE = "monitor_recordings.log"
 DEFAULT_STATE_FILE = "monitor_recordings_state.json"
