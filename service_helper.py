@@ -230,6 +230,7 @@ Group=bsp
 WorkingDirectory={logs_dir}
 ExecStart=/usr/bin/python3 {script_path} \
           --cameras_config {cameras_config_path} --output_csv {output_csv} \
+          --output_jsonl {output_jsonl} \
           --risk_threshold_pct 85
 
 [Install]
@@ -412,6 +413,7 @@ def create_ramdisk_logger_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
         script_path=str((REPO_DIR / "log_ramdisk_stats.py").resolve()),
         cameras_config_path=str(CAMERAS_CONFIG_PATH.resolve()),
         output_csv=str((pathlib.Path(logs_dir) / "ramdisk_stats.csv").resolve()),
+        output_jsonl=str((pathlib.Path(logs_dir) / "ramdisk_per_camera_stats.jsonl").resolve()),
     )
     return [
         (service_path, content),
@@ -862,7 +864,7 @@ def deploy(
         exit without writing files or calling systemctl mutating commands.
     with_infra : bool
         When using a scoped selector (--station/--new/--changed), include
-        infrastructure units (organize/backup/cleanup/monitor) as targets.
+        infrastructure units (pipeline/monitor/ramdisk logger) as targets.
         By default, scoped deploys are camera-only.
 
     Examples
@@ -893,7 +895,12 @@ def deploy(
       sudo python3 service_helper.py deploy --changed --with-infra
     """
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
-    all_units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
+    all_units = (
+        create_camera_units(cam_cfg)
+        + create_aux_units(cam_cfg)
+        + create_monitor_units(cam_cfg)
+        + create_ramdisk_logger_units(cam_cfg)
+    )
 
     selectors = int(bool(stations)) + int(only_new) + int(only_changed)
     if selectors > 1:
@@ -1013,7 +1020,7 @@ def main():
     )
     parser.add_argument(
         "--with-infra", action="store_true",
-        help="With deploy and a scoped selector, include organize/backup/cleanup/monitor units.",
+        help="With deploy and a scoped selector, include pipeline/monitor/ramdisk logger units.",
     )
     args = parser.parse_args()
 
