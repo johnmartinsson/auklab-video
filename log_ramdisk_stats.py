@@ -11,6 +11,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import os
 import pathlib
 from typing import Any
 
@@ -30,7 +31,7 @@ def ensure_csv_header(csv_path: pathlib.Path, fieldnames: list[str]) -> None:
 
 
 def ramdisk_usage(path: pathlib.Path) -> tuple[int, int, int, float]:
-    st = path.statvfs()
+    st = os.statvfs(path)
     total = st.f_blocks * st.f_frsize
     free = st.f_bavail * st.f_frsize
     used = max(0, total - free)
