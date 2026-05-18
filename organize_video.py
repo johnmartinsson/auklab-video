@@ -5,11 +5,23 @@ Move finished segments from <output_dir>/<station>/FILE.<ext>
 
 A file is "finished" when mtime is older than 2xsegment_time seconds.
 """
-import argparse, json, os, pathlib, shutil, sys, time, datetime as _dt
+import argparse, json, os, pathlib, resource, shutil, sys, time, datetime as _dt
 import re
 
 def load_json(path):
     with open(path) as fh: return json.load(fh)
+
+def _report_stats(label: str, t0: float, ru0: resource.struct_rusage) -> None:
+    ru1 = resource.getrusage(resource.RUSAGE_SELF)
+    wall = time.perf_counter() - t0
+    cpu  = (ru1.ru_utime + ru1.ru_stime) - (ru0.ru_utime + ru0.ru_stime)
+    rss  = ru1.ru_maxrss  # kB on Linux
+    rio  = ru1.ru_inblock  - ru0.ru_inblock   # 512-byte blocks read
+    wio  = ru1.ru_oublock  - ru0.ru_oublock   # 512-byte blocks written
+    print(
+        f"[{label}][stats] wall={wall:.1f}s cpu={cpu:.2f}s "
+        f"rss={rss}kB reads={rio} writes={wio}"
+    )
 
 def extract_date_from_filename(filename, station, extension):
     # Pattern: <station>_YYYYMMDDTHHMMSS.<ext>
@@ -21,6 +33,8 @@ def extract_date_from_filename(filename, station, extension):
 
 def main():
     p = argparse.ArgumentParser()
+    t0  = time.perf_counter()
+    ru0 = resource.getrusage(resource.RUSAGE_SELF)
     p.add_argument("--backup_config",  default="/home/bsp/Gits/auklab-video/backup.json")
     p.add_argument("--cameras_config", default="/home/bsp/Gits/auklab-video/cameras.json")
     p.add_argument("--dry-run", action="store_true", help="Report what would be moved without changing files")
@@ -108,6 +122,7 @@ def main():
         f"young_skipped={young_skipped} skipped_missing={skipped_missing} "
         f"move_errors={move_errors} oldest={oldest_msg} → {ready}"
     )
+    _report_stats("organize", t0, ru0)
     sys.exit(0)
 
 if __name__ == "__main__":

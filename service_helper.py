@@ -167,9 +167,9 @@ Wants=network-online.target
 Type=oneshot
 User=bsp
 Group=bsp
-ExecStart=/usr/bin/time -v /usr/bin/python3 {organize_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
-ExecStart=/usr/bin/time -v /usr/bin/python3 {backup_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
-ExecStart=/usr/bin/time -v /usr/bin/python3 {cleanup_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
+ExecStart=/usr/bin/python3 {organize_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
+ExecStart=/usr/bin/python3 {backup_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
+ExecStart=/usr/bin/python3 {cleanup_path} --backup_config {backup_config_path} --cameras_config {cameras_config_path}
 
 [Install]
 WantedBy=multi-user.target

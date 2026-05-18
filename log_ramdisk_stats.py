@@ -39,24 +39,50 @@ def ramdisk_usage(path: pathlib.Path) -> tuple[int, int, int, float]:
     return total, used, free, used_pct
 
 
-def estimate_active_cameras(recording_dir: pathlib.Path, segment_format: str, active_within_seconds: int) -> tuple[int, int]:
+def camera_stats(
+    recording_dir: pathlib.Path,
+    segment_format: str,
+    active_within_seconds: int,
+) -> tuple[int, int, list[dict[str, Any]]]:
+    """Return (total_station_dirs, active_count, per_camera_list).
+
+    Each per-camera dict has: station, files, size_bytes, active (bool).
+    """
     if not recording_dir.is_dir():
-        return 0, 0
+        return 0, 0, []
 
     now = dt.datetime.now(dt.timezone.utc).timestamp()
-    station_dirs = [p for p in recording_dir.iterdir() if p.is_dir()]
+    per_cam: list[dict[str, Any]] = []
     active = 0
 
-    for station_dir in station_dirs:
+    for station_dir in sorted(recording_dir.iterdir()):
+        if not station_dir.is_dir():
+            continue
         newest = 0.0
+        total_size = 0
+        file_count = 0
         for f in station_dir.glob(f"*.{segment_format}"):
-            mtime = f.stat().st_mtime
-            if mtime > newest:
-                newest = mtime
-        if newest > 0 and (now - newest) <= active_within_seconds:
+            try:
+                st = f.stat()
+            except FileNotFoundError:
+                continue
+            total_size += st.st_size
+            file_count += 1
+            if st.st_mtime > newest:
+                newest = st.st_mtime
+        is_active = newest > 0 and (now - newest) <= active_within_seconds
+        if is_active:
             active += 1
+        per_cam.append(
+            {
+                "station": station_dir.name,
+                "files": file_count,
+                "size_bytes": total_size,
+                "active": is_active,
+            }
+        )
 
-    return len(station_dirs), active
+    return len(per_cam), active, per_cam
 
 
 def append_row(csv_path: pathlib.Path, row: dict[str, Any], fieldnames: list[str]) -> None:
@@ -94,7 +120,7 @@ def main() -> int:
         raise FileNotFoundError(f"RAM-disk path not found: {ramdisk}")
 
     total, used, free, used_pct = ramdisk_usage(ramdisk)
-    station_dirs, active_cameras = estimate_active_cameras(
+    station_dirs, active_cameras, per_cam = camera_stats(
         recording_dir=recording_dir,
         segment_format=args.segment_format,
         active_within_seconds=max(args.segment_time * 2, 300),
@@ -155,6 +181,17 @@ def main() -> int:
         f" est_additional={est_additional}"
         f" csv={output_csv}"
     )
+
+    if per_cam:
+        per_cam_sorted = sorted(per_cam, key=lambda c: c["size_bytes"], reverse=True)
+        print(f"  {'station':<12} {'files':>5} {'size_MiB':>10} {'active':>7}")
+        print(f"  {'-'*12} {'-'*5} {'-'*10} {'-'*7}")
+        for c in per_cam_sorted:
+            flag = "yes" if c["active"] else "-"
+            print(
+                f"  {c['station']:<12} {c['files']:>5}"
+                f" {c['size_bytes']/1024/1024:>10.1f} {flag:>7}"
+            )
 
     return 0
 

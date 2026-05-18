@@ -5,7 +5,19 @@ in <success_log_dir>/YYYY-MM-DD.synced
 
 After a successful rsync run the transferred paths are appended to today’s log.
 """
-import argparse, datetime as _dt, json, os, pathlib, subprocess, sys, fcntl
+import argparse, datetime as _dt, fcntl, json, os, pathlib, resource, subprocess, sys, time
+
+def _report_stats(label: str, t0: float, ru0: resource.struct_rusage) -> None:
+    ru1 = resource.getrusage(resource.RUSAGE_SELF)
+    wall = time.perf_counter() - t0
+    cpu  = (ru1.ru_utime + ru1.ru_stime) - (ru0.ru_utime + ru0.ru_stime)
+    rss  = ru1.ru_maxrss
+    rio  = ru1.ru_inblock - ru0.ru_inblock
+    wio  = ru1.ru_oublock - ru0.ru_oublock
+    print(
+        f"[{label}][stats] wall={wall:.1f}s cpu={cpu:.2f}s "
+        f"rss={rss}kB reads={rio} writes={wio}"
+    )
 
 def load_json(p): 
     with open(p) as fh: return json.load(fh)
@@ -18,6 +30,8 @@ def gather_synced(success_dir: pathlib.Path):
 
 def main():
     ap = argparse.ArgumentParser()
+    t0  = time.perf_counter()
+    ru0 = resource.getrusage(resource.RUSAGE_SELF)
     ap.add_argument("--backup_config", default="/home/bsp/Gits/auklab-video/backup.json")
     ap.add_argument("--cameras_config", default="/home/bsp/Gits/auklab-video/cameras.json")
     args = ap.parse_args()
@@ -67,6 +81,7 @@ def main():
     else:
         print("[backup] rsync failed with code", proc.returncode, file=sys.stderr)
         sys.exit(proc.returncode)
+    _report_stats("backup", t0, ru0)
 
 if __name__ == "__main__":
     main()
