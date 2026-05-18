@@ -218,6 +218,36 @@ OnUnitActiveSec=5min
 WantedBy=timers.target
 """
 
+RAMDISK_LOGGER_UNIT_TEMPLATE = """[Unit]
+Description=Log RAM-disk usage and camera headroom stats
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=bsp
+Group=bsp
+WorkingDirectory={logs_dir}
+ExecStart=/usr/bin/python3 {script_path} \
+          --cameras_config {cameras_config_path} --output_csv {output_csv} \
+          --risk_threshold_pct 85
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+RAMDISK_LOGGER_TIMER_TEMPLATE = """[Unit]
+Description=Run RAM-disk stats logger every 5 min
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+"""
+
 
 # ---------------------------------------------------------------------------
 # Low-level helpers
@@ -369,6 +399,26 @@ def create_monitor_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
     return units
 
 
+def create_ramdisk_logger_units(config: dict) -> List[Tuple[pathlib.Path, str]]:
+    """Return (path, content) for the RAM-disk logger service and timer."""
+    defaults = config["defaults"]
+    logs_dir = defaults["logs_dir"]
+
+    service_path = LOCAL_SERVICE_DIR / "log_ramdisk_stats.service"
+    timer_path = LOCAL_TIMER_DIR / "log_ramdisk_stats.timer"
+
+    content = RAMDISK_LOGGER_UNIT_TEMPLATE.format(
+        logs_dir=logs_dir,
+        script_path=str((REPO_DIR / "log_ramdisk_stats.py").resolve()),
+        cameras_config_path=str(CAMERAS_CONFIG_PATH.resolve()),
+        output_csv=str((pathlib.Path(logs_dir) / "ramdisk_stats.csv").resolve()),
+    )
+    return [
+        (service_path, content),
+        (timer_path, RAMDISK_LOGGER_TIMER_TEMPLATE),
+    ]
+
+
 # Old unit names superseded by pipeline_video.{service,timer}.
 _LEGACY_AUX_UNITS = [
     LOCAL_SERVICE_DIR / "organize_video.service",
@@ -393,7 +443,12 @@ def generate_all() -> List[pathlib.Path]:
     """
     cam_cfg = load_json(CAMERAS_CONFIG_PATH)
 
-    units = create_camera_units(cam_cfg) + create_aux_units(cam_cfg) + create_monitor_units(cam_cfg)
+    units = (
+        create_camera_units(cam_cfg)
+        + create_aux_units(cam_cfg)
+        + create_monitor_units(cam_cfg)
+        + create_ramdisk_logger_units(cam_cfg)
+    )
     for path, content in units:
         try:
             existing = path.read_text(encoding="utf-8")

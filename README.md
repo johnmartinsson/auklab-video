@@ -98,6 +98,8 @@ Each script is a thin, single-purpose command-line tool so you can run it manual
 | **`backup_video.py`**       | Rsyncs everything in `ready_for_backup` that is **not yet listed** in the current day’s `.synced` log to the NAS. Adds a simple file lock to avoid overlapping runs.                                        | `--backup_config`                                                                                    | Reads & appends to `success_log_dir/YYYY-MM-DD.synced`.   |
 | **`cleanup_video.py`**      | Deletes local segments that already appear in any `*.synced` log, then prunes empty directories. Run **after** backup.                                                                                      | `--backup_config`                                                                                    | Reads `.synced` logs, unlinks local files.                |
 | **`monitor_recordings.py`** | Every 5 min: checks the newest `.mkv` in each `STATION/` dir. If no new file landed within `segment_time × multiplier` seconds (default = 20 min), it restarts the corresponding `record_camera_*.service`, tracks `DOWN` / `DOWN restart failed` / `RECOVERED`, and sends a daily 8AM summary if any cameras remain down. | `--recording_dir`, `--segment_time`, `--multiplier`, `--logs_dir`                                    | Calls `systemctl restart …`, writes `monitor_recordings.log`. |
+| **`log_ramdisk_stats.py`**  | Every run logs RAM-disk usage plus camera-capacity headroom estimates (how many more cameras can be added before reaching a risk threshold).                                                                   | `--cameras_config`, `--output_csv`, `--risk_threshold_pct`                                           | Writes rows to `logs/ramdisk_stats.csv`.                  |
+| **`summarize_ramdisk_usage.py`** | Produces hourly min/avg/max RAM-disk usage summaries from either logger CSV (best) or `sar -r ALL` text (indirect proxy).                                                                                | `--log_csv` **or** `--sar_file`, `--ramdisk_total_bytes`                                             | Reads CSV or sar text, prints hourly table.               |
 | **`service_helper.py`**     | Autogenerates all \*.service / \*.timer files **locally**, optional symlink into `/etc/systemd/system`, and can bulk-start/enable them.                                                                     | `generate`, `link`, `start`, `stop`, `enable`, `disable`, `status`                                   | Writes to `services/`, `timers/`, invokes `systemctl`.    |
 
 ---
@@ -129,6 +131,19 @@ Auxiliary one-shot jobs and their timers:
 The timers are intentionally staggered (2 min apart) to avoid disk contention.&#x20;
 
 A watchdog pair (`monitor_recordings.service` + `.timer`) restarts crashed or frozen recorders every 5 min.
+
+A RAM-disk logger pair (`log_ramdisk_stats.service` + `.timer`) appends periodic usage rows to `logs/ramdisk_stats.csv`.
+
+### RAM-disk reporting examples
+
+```bash
+# Use the direct logger data (recommended)
+python3 summarize_ramdisk_usage.py --log_csv /home/bsp/auklab-video/logs/ramdisk_stats.csv
+
+# Best-effort summary from sysstat text output
+sar -r ALL > /tmp/sar_mem.txt
+python3 summarize_ramdisk_usage.py --sar_file /tmp/sar_mem.txt --ramdisk_path /mnt/ramdisk
+```
 
 ---
 
