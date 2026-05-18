@@ -2,7 +2,8 @@
 """Periodic RAM-disk usage logger.
 
 Writes one CSV row per run with current /mnt/ramdisk usage and a rough
-camera-capacity estimate.
+camera-capacity estimate. Also appends one JSONL record per run with the
+full per-camera breakdown for later analysis.
 """
 
 from __future__ import annotations
@@ -92,6 +93,13 @@ def append_row(csv_path: pathlib.Path, row: dict[str, Any], fieldnames: list[str
         writer.writerow(row)
 
 
+def append_jsonl(jsonl_path: pathlib.Path, record: dict[str, Any]) -> None:
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    with jsonl_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, separators=(",", ":"), sort_keys=True))
+        fh.write("\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Log RAM-disk usage and camera headroom estimates")
     parser.add_argument("--ramdisk_path", default="/mnt/ramdisk")
@@ -100,6 +108,7 @@ def main() -> int:
     parser.add_argument("--segment_format", default="mkv")
     parser.add_argument("--risk_threshold_pct", type=float, default=85.0)
     parser.add_argument("--output_csv", default="/home/bsp/auklab-video/logs/ramdisk_stats.csv")
+    parser.add_argument("--output_jsonl", default=None)
     parser.add_argument("--cameras_config", default=None)
     args = parser.parse_args()
 
@@ -115,6 +124,11 @@ def main() -> int:
     ramdisk = pathlib.Path(args.ramdisk_path)
     recording_dir = pathlib.Path(args.recording_dir)
     output_csv = pathlib.Path(args.output_csv)
+    output_jsonl = (
+        pathlib.Path(args.output_jsonl)
+        if args.output_jsonl
+        else output_csv.with_name("ramdisk_per_camera_stats.jsonl")
+    )
 
     if not ramdisk.exists():
         raise FileNotFoundError(f"RAM-disk path not found: {ramdisk}")
@@ -172,6 +186,28 @@ def main() -> int:
     }
 
     append_row(output_csv, row, fieldnames)
+    append_jsonl(
+        output_jsonl,
+        {
+            "timestamp": row["timestamp"],
+            "hour": row["hour"],
+            "ramdisk": {
+                "path": str(ramdisk),
+                "total_bytes": total,
+                "used_bytes": used,
+                "free_bytes": free,
+                "used_pct": round(used_pct, 3),
+                "risk_threshold_pct": round(args.risk_threshold_pct, 2),
+                "safe_headroom_bytes": safe_headroom,
+            },
+            "camera_station_dirs": station_dirs,
+            "active_cameras_est": active_cameras,
+            "avg_bytes_per_active_camera": avg_per_active_camera,
+            "est_additional_cameras_safe": est_additional,
+            "projected_used_pct_plus_one_camera": round(projected_plus_one, 3),
+            "cameras": per_cam,
+        },
+    )
 
     print(
         "[RAMDISK_LOG]"
@@ -180,6 +216,7 @@ def main() -> int:
         f" active_cameras={active_cameras}"
         f" est_additional={est_additional}"
         f" csv={output_csv}"
+        f" jsonl={output_jsonl}"
     )
 
     if per_cam:

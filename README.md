@@ -132,13 +132,13 @@ The timers are intentionally staggered (2 min apart) to avoid disk contention.&#
 
 A watchdog pair (`monitor_recordings.service` + `.timer`) restarts crashed or frozen recorders every 5 min.
 
-A RAM-disk logger pair (`log_ramdisk_stats.service` + `.timer`) appends periodic usage rows to `logs/ramdisk_stats.csv`.
+A RAM-disk logger pair (`log_ramdisk_stats.service` + `.timer`) appends periodic usage rows to `logs/ramdisk_stats.csv` and one structured per-run JSONL record to `logs/ramdisk_per_camera_stats.jsonl`.
 
 ### RAM-disk reporting examples
 
 ```bash
 # Use the direct logger data (recommended)
-python3 summarize_ramdisk_usage.py --log_csv /home/bsp/auklab-video/logs/ramdisk_stats.csv
+python3 summarize_ramdisk_usage.py /home/bsp/auklab-video/logs/ramdisk_stats.csv
 
 # Best-effort summary from sysstat text output
 sar -r ALL > /tmp/sar_mem.txt

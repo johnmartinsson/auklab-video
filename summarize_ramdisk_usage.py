@@ -3,6 +3,9 @@
 
 Reads the CSV written by log_ramdisk_stats.py and prints a per-hour
 min/avg/max table covering the full date range in the file.
+
+Optional plotting mode renders per-sample min/avg/max usage curves for the
+most recent N days, with one line per day on each subplot.
 """
 
 from __future__ import annotations
@@ -10,6 +13,8 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import importlib
+import os
 import statistics
 import pathlib
 from collections import defaultdict
@@ -66,6 +71,48 @@ def summarize_by_hour(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def build_daily_sample_series(rows: list[dict[str, Any]]) -> dict[dt.date, list[dict[str, Any]]]:
+    grouped: dict[dt.date, list[dict[str, Any]]] = defaultdict(list)
+    for row in sorted(rows, key=lambda item: item["timestamp"]):
+        day = row["timestamp"].date()
+        grouped[day].append(row)
+
+    out: dict[dt.date, list[dict[str, Any]]] = {}
+    for day in sorted(grouped.keys()):
+        running_min = 0
+        running_sum = 0
+        running_max = 0
+        series: list[dict[str, Any]] = []
+
+        for idx, row in enumerate(grouped[day], start=1):
+            used_bytes = row["used_bytes"]
+            if idx == 1:
+                running_min = used_bytes
+                running_max = used_bytes
+            else:
+                running_min = min(running_min, used_bytes)
+                running_max = max(running_max, used_bytes)
+            running_sum += used_bytes
+
+            timestamp = row["timestamp"]
+            hours_since_midnight = (
+                timestamp.hour
+                + timestamp.minute / 60.0
+                + timestamp.second / 3600.0
+            )
+            series.append(
+                {
+                    "time_hours": hours_since_midnight,
+                    "used_min_bytes": running_min,
+                    "used_avg_bytes": int(running_sum / idx),
+                    "used_max_bytes": running_max,
+                }
+            )
+
+        out[day] = series
+    return out
+
+
 def format_bytes(n: int) -> str:
     step = 1024.0
     units = ["B", "KiB", "MiB", "GiB", "TiB"]
@@ -75,6 +122,10 @@ def format_bytes(n: int) -> str:
             return f"{x:.2f} {unit}"
         x /= step
     return f"{x:.2f} TiB"
+
+
+def bytes_to_gib(n: int) -> float:
+    return n / (1024 ** 3)
 
 
 def print_table(summary: list[dict[str, Any]], date_range: str | None = None) -> None:
@@ -103,6 +154,67 @@ def print_table(summary: list[dict[str, Any]], date_range: str | None = None) ->
         )
 
 
+def plot_daily_hourly_usage(
+    daily_summary: dict[dt.date, list[dict[str, Any]]],
+    max_days: int,
+    output_path: pathlib.Path | None = None,
+) -> None:
+    if not daily_summary:
+        raise SystemExit("No data available to plot.")
+
+    try:
+        matplotlib = importlib.import_module("matplotlib")
+        if output_path is not None:
+            matplotlib.use("Agg")
+        plt = importlib.import_module("matplotlib.pyplot")
+    except ImportError as exc:
+        raise SystemExit(
+            "Plotting requires matplotlib. Install it with 'pip install matplotlib', "
+            "or rerun with --plot-output to save after installing."
+        ) from exc
+
+    days = sorted(daily_summary.keys())[-max_days:]
+    metrics = [
+        ("used_min_bytes", "Running Min Used", "Min used (GiB)"),
+        ("used_avg_bytes", "Running Avg Used", "Avg used (GiB)"),
+        ("used_max_bytes", "Running Max Used", "Max used (GiB)"),
+    ]
+
+    fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True, constrained_layout=True)
+    if not isinstance(axes, (list, tuple)):
+        axes = list(axes)
+
+    for axis, (metric_key, title, ylabel) in zip(axes, metrics):
+        for day in days:
+            hours = [entry["time_hours"] for entry in daily_summary[day]]
+            values = [bytes_to_gib(entry[metric_key]) for entry in daily_summary[day]]
+            axis.plot(hours, values, marker="o", linewidth=1.8, label=day.isoformat())
+
+        axis.set_title(title)
+        axis.set_ylabel(ylabel)
+        axis.set_xlim(0, 24)
+        axis.set_xticks(range(25))
+        axis.grid(True, alpha=0.3)
+        axis.legend(title="Day", ncols=1, fontsize=9)
+
+    axes[-1].set_xlabel("Time of day (hours)")
+    fig.suptitle(f"RAM-disk usage by sample for last {len(days)} day(s)")
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150)
+        print(f"Saved plot to {output_path}")
+        plt.close(fig)
+        return
+
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        raise SystemExit(
+            "No graphical display detected. Use --plot-output /path/to/ramdisk_usage.png to save the figure."
+        )
+
+    plt.show()
+
+
 def main() -> int:
     p = argparse.ArgumentParser(
         description="Summarize RAM-disk usage by hour of day from log_ramdisk_stats CSV"
@@ -114,7 +226,28 @@ def main() -> int:
         metavar="YYYY-MM-DD",
         help="Only include rows on or after this date",
     )
+    p.add_argument(
+        "--plot",
+        action="store_true",
+        help="Plot hourly min/avg/max usage for the most recent days in the CSV.",
+    )
+    p.add_argument(
+        "--plot-days",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Number of most recent days to include in the plot (default: 5).",
+    )
+    p.add_argument(
+        "--plot-output",
+        default=None,
+        metavar="PATH",
+        help="Save the plot to this file instead of opening an interactive window.",
+    )
     args = p.parse_args()
+
+    if args.plot_days < 1:
+        raise SystemExit("--plot-days must be at least 1.")
 
     rows = parse_logger_csv(pathlib.Path(args.log_csv))
     if not rows:
@@ -137,6 +270,14 @@ def main() -> int:
 
     summary = summarize_by_hour(rows)
     print_table(summary, date_range=date_range)
+
+    if args.plot or args.plot_output:
+        plot_daily_hourly_usage(
+            build_daily_sample_series(rows),
+            max_days=args.plot_days,
+            output_path=pathlib.Path(args.plot_output) if args.plot_output else None,
+        )
+
     return 0
 
 
